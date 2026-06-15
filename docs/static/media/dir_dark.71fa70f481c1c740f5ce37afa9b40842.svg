@@ -1,0 +1,17 @@
+<svg width="24.000000" height="24.000000" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+	<desc>
+			Created with Pixso.
+	</desc>
+	<defs>
+		<clipPath id="clip135_1986">
+			<rect id="svg" width="24.000000" height="24.000000" fill="white" fill-opacity="0"/>
+		</clipPath>
+	</defs>
+	<g clip-path="url(#clip135_1986)">
+		<g opacity="0.000000">
+			<rect id="rect" width="24.000000" height="24.000000" fill="#FFFFFF" fill-opacity="1.000000"/>
+		</g>
+		<path id="path" d="M12 16.15C12.43 16.15 12.81 15.99 13.14 15.67L18.88 10.01C19.12 9.77 19.25 9.47 19.25 9.12C19.25 8.76 19.12 8.46 18.88 8.21C18.64 7.97 18.35 7.85 18 7.85C17.64 7.85 17.34 7.97 17.09 8.21L12 13.27L6.88 8.21C6.64 7.97 6.35 7.85 6 7.85C5.64 7.85 5.35 7.97 5.11 8.21C4.87 8.46 4.75 8.76 4.75 9.12C4.75 9.47 4.87 9.77 5.11 10.01L10.85 15.67C11.18 15.99 11.56 16.15 12 16.15Z" fill="#FFFFFF" fill-opacity="0.900000" fill-rule="nonzero"/>
+	</g>
+</svg>
+

@@ -1,0 +1,56 @@
+{
+  "app": {
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "/Users/hongviet/.ohos/config/default_GOTIENGVIET_-3M7Aw7Ii-VP5QF4QtP9CMgG0WRhEU5aNwAqTjNDO2M=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001A6F6A083347A4B44948B4EA6E1FAF5058AE65120B749A58B39CF6F6E52EE5529088D941A3C149",
+          "profile": "/Users/hongviet/.ohos/config/default_GOTIENGVIET_-3M7Aw7Ii-VP5QF4QtP9CMgG0WRhEU5aNwAqTjNDO2M=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "/Users/hongviet/.ohos/config/default_GOTIENGVIET_-3M7Aw7Ii-VP5QF4QtP9CMgG0WRhEU5aNwAqTjNDO2M=.p12",
+          "storePassword": "0000001AEA3AC105D10E948ACFB9FED5F2995DF5D6484C27347DDC62F5CF042D1F9EC9C6CB93FACDDA00"
+        }
+      }
+    ],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "default",
+        "targetSdkVersion": "6.1.0(23)",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "runtimeOS": "HarmonyOS",
+        "buildOption": {
+          "strictMode": {
+            "caseSensitiveCheck": true,
+            "useNormalizedOHMUrl": true
+          }
+        }
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug",
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "Stage",
+      "srcPath": "./Stage",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

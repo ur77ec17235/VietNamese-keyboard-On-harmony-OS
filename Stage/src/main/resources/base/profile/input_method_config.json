@@ -1,0 +1,31 @@
+{
+  "subtypes": [
+    {
+      "label": "Tiếng Việt - Telex",
+      "labelId": "$string:subtype_telex",
+      "id": "telex-vi",
+      "language": "vi",
+      "locale": "vi-VN",
+      "icon": "$media:layered_image",
+      "isDefault": true
+    },
+    {
+      "label": "Tiếng Việt - VNI",
+      "labelId": "$string:subtype_vni",
+      "id": "vni-vi",
+      "language": "vi",
+      "locale": "vi-VN",
+      "icon": "$media:layered_image",
+      "isDefault": false
+    },
+    {
+      "label": "English",
+      "labelId": "$string:subtype_english",
+      "id": "en",
+      "language": "en",
+      "locale": "en-US",
+      "icon": "$media:layered_image",
+      "isDefault": false
+    }
+  ]
+}

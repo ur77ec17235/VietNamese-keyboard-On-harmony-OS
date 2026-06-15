@@ -1,0 +1,32 @@
+{
+  "color": [
+    {
+      "name": "start_window_background",
+      "value": "#0A0A1E"
+    },
+    {
+      "name": "keyboard_bg",
+      "value": "#111128"
+    },
+    {
+      "name": "key_normal_bg",
+      "value": "#1E1E42"
+    },
+    {
+      "name": "key_special_bg",
+      "value": "#0C0C2E"
+    },
+    {
+      "name": "accent_color",
+      "value": "#E94560"
+    },
+    {
+      "name": "text_primary",
+      "value": "#E8E8F0"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#8888AA"
+    }
+  ]
+}

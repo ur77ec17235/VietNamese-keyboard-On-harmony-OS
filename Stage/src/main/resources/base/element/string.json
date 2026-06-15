@@ -1,0 +1,40 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "GoTiếngViệt"
+    },
+    {
+      "name": "module_desc",
+      "value": "Bàn phím tiếng Việt thông minh cho HarmonyOS"
+    },
+    {
+      "name": "ability_desc",
+      "value": "GoTiếngViệt - Ứng dụng cài đặt bàn phím"
+    },
+    {
+      "name": "service_desc",
+      "value": "GoTiếngViệt - Dịch vụ bàn phím tiếng Việt"
+    },
+    {
+      "name": "telex_service_desc",
+      "value": "GoTiếngViệt Telex Input Method Service"
+    },
+    {
+      "name": "subtype_telex",
+      "value": "Tiếng Việt - Telex"
+    },
+    {
+      "name": "subtype_vni",
+      "value": "Tiếng Việt - VNI"
+    },
+    {
+      "name": "subtype_english",
+      "value": "English"
+    },
+    {
+      "name": "permission_reason_clipboard",
+      "value": "Cần quyền này để đọc và dán nội dung từ clipboard"
+    }
+  ]
+}
