@@ -659,7 +659,7 @@ struct KeyboardPage {
           Text(c)
             .fontSize(landscape ? 12 : 14).fontColor(this.txt)
             .padding({ left: 10, right: 10 }).maxLines(1)
-            .onClick(() => KeyboardBridge.sendPasteText(c))
+            .onClick(() => KeyboardBridge.sendCandidate(c))
         })
       }
       Blank()

@@ -24,6 +24,13 @@ export const KEY_IS_SHIFTED = 'gtv_isShifted';
 export const KEY_SHOW_CLIPBOARD = 'gtv_showClipboard';
 export const KEY_CLIPBOARD_ITEMS = 'gtv_clipboardItems';
 
+const LOCAL_CANDIDATE_WORDS: string[] = [
+  'anh', 'bao', 'ban', 'bạn', 'bây giờ', 'biết', 'cho', 'chưa', 'có', 'của',
+  'cũng', 'đang', 'được', 'em', 'gì', 'hay', 'hôm nay', 'không', 'là', 'làm',
+  'mình', 'muốn', 'này', 'nếu', 'ngày', 'người', 'nhé', 'nhưng', 'ở', 'phải',
+  'rồi', 'sẽ', 'thì', 'thôi', 'tôi', 'trong', 'và', 'với', 'vì', 'việc'
+];
+
 export default class GoTiengVietService extends InputMethodExtensionAbility {
   private panel: inputMethodEngine.Panel | null = null;
   private inputClient: inputMethodEngine.InputClient | null = null;
@@ -34,6 +41,7 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
   private isShowing: boolean = false;
   private panelReady: boolean = false;
   private userRequestedHide: boolean = false;
+  private lastLandscape: boolean = false;
 
   onCreate(want: Want): void {
     console.info('[GoTiengViet] Service onCreate');
@@ -82,6 +90,9 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
         return;
       }
       this.isShowing = true;
+      this.refreshPanelLayout().catch((err: Error) => {
+        console.error('[GoTiengViet] refreshPanelLayout error:', err);
+      });
       this.showKeyboard();
     });
 
@@ -124,6 +135,12 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       AppStorage.set(KEY_IS_SHIFTED, this.imeManager.isShifted());
     });
 
+    // Caps lock
+    KeyboardBridge.registerCapsLockHandler(() => {
+      this.imeManager.toggleCapsLock();
+      AppStorage.set(KEY_IS_SHIFTED, this.imeManager.isShifted());
+    });
+
     // Enter
     KeyboardBridge.registerEnterHandler(() => {
       this.handleEnter();
@@ -153,9 +170,9 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       this.hideKeyboard();
     });
 
-    // Chọn candidate (tạm vô hiệu trong local composing mode)
-    KeyboardBridge.registerCandidateHandler((_text: string) => {
-      AppStorage.set(KEY_CANDIDATES, [] as string[]);
+    // Chọn candidate: thay thế phần composing hiện tại rồi commit từ được chọn.
+    KeyboardBridge.registerCandidateHandler((text: string) => {
+      this.commitCandidate(text);
     });
 
     // Dán từ clipboard
@@ -177,10 +194,7 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
 
       // Resize panel (BẮT BUỘC TRÊN API 9+ TRƯỚC KHI SHOW)
       try {
-        const d = display.getDefaultDisplaySync();
-        const kbHeight = Math.floor(d.height * 0.35); // Khoảng 35% chiều cao màn hình
-        await this.panel.resize(d.width, kbHeight);
-        console.info('[GoTiengViet] Panel resized');
+        await this.refreshPanelLayout();
       } catch (e) {
         console.error('[GoTiengViet] resize error:', e);
       }
@@ -196,6 +210,33 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
     } catch (err) {
       console.error('[GoTiengViet] createKeyboardPanel error:', JSON.stringify(err));
     }
+  }
+
+  private async refreshPanelLayout(): Promise<void> {
+    if (!this.panel) {
+      return;
+    }
+
+    const d = display.getDefaultDisplaySync();
+    const isLandscape = d.width > d.height;
+
+    // Dọc: 40% chiều cao màn hình
+    // Ngang: 42% chiều cao màn hình (shorter side) – bàn phím ngang thường ~40-45%
+    const kbHeightPx = isLandscape
+      ? Math.round(d.height * 0.42)
+      : Math.round(d.height * 0.40);
+
+    // Chuyển px sang vp cho UI layout
+    const density = d.densityPixels > 0 ? d.densityPixels : 3.0;
+    const kbHeightVp = Math.round(kbHeightPx / density);
+
+    await this.panel.resize(d.width, kbHeightPx);
+    this.lastLandscape = isLandscape;
+    AppStorage.setOrCreate('gtv_isLandscape',   isLandscape);
+    AppStorage.set('gtv_panelHeight',   kbHeightPx);
+    AppStorage.set('gtv_panelHeightVp', kbHeightVp);
+    AppStorage.setOrCreate('gtv_screenW', d.width);
+    console.info(`[GoTiengViet] Panel: landscape=${isLandscape}, px=${kbHeightPx}, vp=${kbHeightVp}, density=${density}`);
   }
 
   private showKeyboard(): void {
@@ -246,23 +287,19 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
         }
         this.currentComposing = '';
       } else if (result.commitText.length > 0) {
+        if (this.shouldReplaceComposingOnCommit(key) && this.currentComposing.length > 0) {
+          this.inputClient.deleteForwardSync(this.currentComposing.length);
+        }
         this.inputClient.insertTextSync(result.commitText);
         this.currentComposing = '';
       } else if (result.composingText.length > 0) {
         const previousLength = this.currentComposing.length;
-        const nextLength = result.composingText.length;
 
         if (previousLength > 0) {
           this.inputClient.deleteForwardSync(previousLength);
         }
         this.inputClient.insertTextSync(result.composingText);
         this.currentComposing = result.composingText;
-
-        if (nextLength > 0) {
-          for (let i = 0; i < nextLength; i++) {
-            this.inputClient.deleteBackwardSync(1);
-          }
-        }
       } else {
         this.currentComposing = '';
       }
@@ -270,9 +307,99 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       console.error('[GoTiengViet] handleVirtualKey error:', err);
     }
 
-    AppStorage.set(KEY_COMPOSING, '');
-    AppStorage.set(KEY_CANDIDATES, [] as string[]);
+    this.publishComposition(result.composingText, result.candidates);
     AppStorage.set(KEY_IS_SHIFTED, this.imeManager.isShifted());
+  }
+
+  private shouldReplaceComposingOnCommit(key: string): boolean {
+    if (key.length !== 1 || key === ' ') {
+      return false;
+    }
+    return this.isWordChar(key);
+  }
+
+  private publishComposition(composingText: string, candidates: string[]): void {
+    AppStorage.set(KEY_COMPOSING, composingText);
+    AppStorage.set(KEY_CANDIDATES, this.buildCandidates(composingText, candidates));
+  }
+
+  private buildCandidates(composingText: string, engineCandidates: string[]): string[] {
+    if (composingText.length === 0) {
+      return [];
+    }
+
+    const result: string[] = [];
+    this.addCandidate(result, composingText);
+
+    for (const candidate of engineCandidates) {
+      this.addCandidate(result, candidate);
+    }
+
+    const prefix = this.normalizeForCandidate(composingText);
+    if (prefix.length >= 2) {
+      for (const word of LOCAL_CANDIDATE_WORDS) {
+        if (this.normalizeForCandidate(word).startsWith(prefix)) {
+          this.addCandidate(result, this.matchCandidateCase(composingText, word));
+        }
+        if (result.length >= 6) {
+          break;
+        }
+      }
+    }
+
+    return result.slice(0, 6);
+  }
+
+  private addCandidate(candidates: string[], value: string): void {
+    if (value.length === 0 || candidates.includes(value)) {
+      return;
+    }
+    candidates.push(value);
+  }
+
+  private matchCandidateCase(source: string, candidate: string): string {
+    if (source.length === 0) {
+      return candidate;
+    }
+    const first = source[0];
+    if (first === first.toUpperCase() && first !== first.toLowerCase()) {
+      return candidate.substring(0, 1).toUpperCase() + candidate.substring(1);
+    }
+    return candidate;
+  }
+
+  private normalizeForCandidate(value: string): string {
+    let text = value.toLowerCase();
+    text = text.replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a');
+    text = text.replace(/[èéẹẻẽêềếệểễ]/g, 'e');
+    text = text.replace(/[ìíịỉĩ]/g, 'i');
+    text = text.replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o');
+    text = text.replace(/[ùúụủũưừứựửữ]/g, 'u');
+    text = text.replace(/[ỳýỵỷỹ]/g, 'y');
+    text = text.replace(/đ/g, 'd');
+    return text;
+  }
+
+  private async commitCandidate(text: string): Promise<void> {
+    if (!this.inputClient || text.length === 0) return;
+
+    try {
+      if (this.currentComposing.length > 0) {
+        this.inputClient.deleteForwardSync(this.currentComposing.length);
+      }
+      this.inputClient.insertTextSync(text);
+      this.currentComposing = '';
+      this.imeManager.reset();
+      AppStorage.set(KEY_COMPOSING, '');
+      AppStorage.set(KEY_CANDIDATES, [] as string[]);
+      AppStorage.set(KEY_IS_SHIFTED, this.imeManager.isShifted());
+    } catch (err) {
+      console.error('[GoTiengViet] commitCandidate error:', err);
+    }
+  }
+
+  private isWordChar(ch: string): boolean {
+    return /^[0-9A-Za-zÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ_]$/.test(ch);
   }
 
   private async handleEnter(): Promise<void> {

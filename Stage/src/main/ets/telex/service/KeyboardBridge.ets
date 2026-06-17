@@ -11,6 +11,7 @@ export type PasteTextHandler = (text: string) => void;
 class KeyboardBridgeImpl {
   private onKeyHandler: KeyEventHandler | null = null;
   private onShiftHandler: SimpleEventHandler | null = null;
+  private onCapsLockHandler: SimpleEventHandler | null = null;
   private onEnterHandler: SimpleEventHandler | null = null;
   private onModeHandler: SimpleEventHandler | null = null;
   private onClipboardHandler: SimpleEventHandler | null = null;
@@ -18,14 +19,16 @@ class KeyboardBridgeImpl {
   private onCandidateHandler: KeyEventHandler | null = null;
   private onPasteHandler: PasteTextHandler | null = null;
 
-  // === Service đăng ký handlers ===
-
   registerKeyHandler(handler: KeyEventHandler): void {
     this.onKeyHandler = handler;
   }
 
   registerShiftHandler(handler: SimpleEventHandler): void {
     this.onShiftHandler = handler;
+  }
+
+  registerCapsLockHandler(handler: SimpleEventHandler): void {
+    this.onCapsLockHandler = handler;
   }
 
   registerEnterHandler(handler: SimpleEventHandler): void {
@@ -52,8 +55,6 @@ class KeyboardBridgeImpl {
     this.onPasteHandler = handler;
   }
 
-  // === UI gọi methods này ===
-
   sendKey(key: string): void {
     if (this.onKeyHandler) {
       this.onKeyHandler(key);
@@ -61,36 +62,57 @@ class KeyboardBridgeImpl {
   }
 
   sendShift(): void {
-    if (this.onShiftHandler) this.onShiftHandler();
+    if (this.onShiftHandler) {
+      this.onShiftHandler();
+    }
+  }
+
+  sendCapsLock(): void {
+    if (this.onCapsLockHandler) {
+      this.onCapsLockHandler();
+    }
   }
 
   sendEnter(): void {
-    if (this.onEnterHandler) this.onEnterHandler();
+    if (this.onEnterHandler) {
+      this.onEnterHandler();
+    }
   }
 
   sendModeSwitch(): void {
-    if (this.onModeHandler) this.onModeHandler();
+    if (this.onModeHandler) {
+      this.onModeHandler();
+    }
   }
 
   sendClipboard(): void {
-    if (this.onClipboardHandler) this.onClipboardHandler();
+    if (this.onClipboardHandler) {
+      this.onClipboardHandler();
+    }
   }
 
   sendHide(): void {
-    if (this.onHideHandler) this.onHideHandler();
+    if (this.onHideHandler) {
+      this.onHideHandler();
+    }
   }
 
   sendCandidate(text: string): void {
-    if (this.onCandidateHandler) this.onCandidateHandler(text);
+    if (this.onCandidateHandler) {
+      this.onCandidateHandler(text);
+    }
   }
 
   sendPasteText(text: string): void {
-    if (this.onPasteHandler) this.onPasteHandler(text);
+    if (this.onPasteHandler) {
+      this.onPasteHandler(text);
+    }
   }
 
   clearHandlers(): void {
     this.onKeyHandler = null;
     this.onShiftHandler = null;
+    this.onCapsLockHandler = null;
     this.onEnterHandler = null;
     this.onModeHandler = null;
     this.onClipboardHandler = null;
@@ -100,5 +122,4 @@ class KeyboardBridgeImpl {
   }
 }
 
-// Singleton instance
 export const KeyboardBridge = new KeyboardBridgeImpl();
