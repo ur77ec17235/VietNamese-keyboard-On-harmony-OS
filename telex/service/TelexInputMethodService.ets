@@ -1,6 +1,5 @@
 import { InputMethodExtensionAbility } from '@ohos.inputmethodextension';
-import { TelexEngine } from '../core/TelexEngine';
-import { CandidateView } from '../ui/CandidateView';
+
 import { VirtualKeyboard } from '../ui/VirtualKeyboard';
 
 export default class TelexInputMethodService extends InputMethodExtensionAbility {
