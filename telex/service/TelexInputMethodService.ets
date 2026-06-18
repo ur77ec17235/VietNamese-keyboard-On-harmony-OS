@@ -8,26 +8,6 @@ export default class TelexInputMethodService extends InputMethodExtensionAbility
   private candidateView: CandidateView | null = null;
   private keyboardView: VirtualKeyboard | null = null;
 
-  onCreate(want): void {
-    console.log('TelexInputMethodService onCreate');
-    this.telexEngine = new TelexEngine();
-    this.initViews();
-  }
-
-  onDestroy(): void {
-    console.log('TelexInputMethodService onDestroy');
-  }
-
-  private initViews(): void {
-    // Khởi tạo các view
-    // Note: Trong thực tế, cần sử dụng window manager
-  }
-
-  // Called when the input method is bound to a client
-  onBindInput(client): void {
-    console.log('onBindInput:', client);
-  }
-
   // Called when starting input
   onStartInput(client, info): void {
     console.log('onStartInput:', info);
