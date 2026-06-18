@@ -1,136 +1,171 @@
 /**
  * ClipboardManager.ets
- * Quản lý clipboard - đọc text và ảnh từ pasteboard của HarmonyOS
+ * Reader tối giản cho system clipboard. Không lưu history nền.
  */
 
-import pasteboard from '@ohos.pasteboard';
-import image from '@ohos.multimedia.image';
+import { pasteboard } from '@kit.BasicServicesKit';
 
 export interface ClipboardItem {
-  type: 'text' | 'image' | 'html';
-  text?: string;
-  html?: string;
-  pixelMap?: image.PixelMap;
+  kind: string;
+  text: string;
   timestamp: number;
 }
 
+export interface ClipboardReadResult {
+  items: ClipboardItem[];
+  message: string;
+}
+
 export class ClipboardManager {
-  private history: ClipboardItem[] = [];
-  private maxHistory: number = 20;
+  async writeItemToSystemPasteboard(item: ClipboardItem): Promise<void> {
+    const pb = pasteboard.getSystemPasteboard();
+    await pb.setData(pasteboard.createPlainTextData(item.text));
+  }
 
-  /**
-   * Lấy nội dung text từ clipboard
-   */
-  async getClipboardText(): Promise<string> {
+  // private stripHtml(htmlText: string): string {
+  //   return htmlText
+  //     .replace(/<script[\s\S]*?<\/script>/gi, '')
+  //     .replace(/<style[\s\S]*?<\/style>/gi, '')
+  //     .replace(/<[^>]*>/g, ' ')
+  //     .replace(/&nbsp;/g, ' ')
+  //     .replace(/&amp;/g, '&')
+  //     .replace(/&lt;/g, '<')
+  //     .replace(/&gt;/g, '>')
+  //     .replace(/&quot;/g, '"')
+  //     .replace(/&#39;/g, "'")
+  //     .replace(/\s+/g, ' ')
+  //     .trim();
+  // }
+
+  private pushText(items: ClipboardItem[], value: string | undefined | null, timestamp: number): void {
+    const text = (value || '').trim();
+    if (text.length === 0 || this.hasItemValue(items, text)) {
+      return;
+    }
+
+    items.push({
+      kind: 'text',
+      text: text,
+      timestamp: timestamp
+    });
+  }
+
+  // private pushHtml(items: ClipboardItem[], value: string | undefined | null, timestamp: number): void {
+  //   const htmlText = (value || '').trim();
+  //   if (htmlText.length === 0) {
+  //     return;
+  //   }
+  //   const stripped = this.stripHtml(htmlText);
+  //   this.pushText(items, stripped.length > 0 ? stripped : htmlText, timestamp);
+  // }
+
+  private hasItemValue(items: ClipboardItem[], value: string): boolean {
+    return items.some((item: ClipboardItem) => {
+      return item.text === value;
+    });
+  }
+
+  private pushUri(items: ClipboardItem[], value: string | undefined | null, mimeType: string, timestamp: number): void {
+    const uri = (value || '').trim();
+
+    if (uri.length === 0 || this.hasItemValue(items, uri)) {
+      return;
+    }
+
+    // Không phân biệt ảnh/file/link nữa.
+    // Clipboard có URI gì thì lưu URI đó vào list.
+    this.pushText(items, uri, timestamp);
+  }
+  //
+  //   if (mimeType.toLowerCase().startsWith('image/') || this.isImageUri(uri)) {
+  //     return;
+  //   }
+  //
+  //   this.pushText(items, uri, timestamp);
+  // }
+
+  private getPrimaryText(data: pasteboard.PasteData): string {
     try {
-      const pb = pasteboard.getSystemPasteboard();
-      const data = await pb.getData();
-      if (!data) return '';
-
-      const mimeTypes = data.getMimeTypes();
-      if (mimeTypes.includes(pasteboard.MIMETYPE_TEXT_PLAIN)) {
-        return data.getPrimaryText() || '';
-      }
-      if (mimeTypes.includes(pasteboard.MIMETYPE_TEXT_HTML)) {
-        return data.getPrimaryHtml() || '';
-      }
-      return '';
-    } catch (err) {
-      console.error('ClipboardManager: getClipboardText failed:', err);
+      return data.getPrimaryText();
+    } catch (_) {
       return '';
     }
   }
 
-  /**
-   * Lấy ảnh từ clipboard (nếu có)
-   */
-  async getClipboardImage(): Promise<image.PixelMap | null> {
-    try {
-      const pb = pasteboard.getSystemPasteboard();
-      const data = await pb.getData();
-      if (!data) return null;
+  // private getPrimaryHtml(data: pasteboard.PasteData): string {
+  //   try {
+  //     return data.getPrimaryHtml();
+  //   } catch (_) {
+  //     return '';
+  //   }
+  // }
 
-      const mimeTypes = data.getMimeTypes();
-      if (mimeTypes.includes(pasteboard.MIMETYPE_PIXELMAP)) {
-        return data.getPrimaryPixelMap() || null;
-      }
-      return null;
-    } catch (err) {
-      console.error('ClipboardManager: getClipboardImage failed:', err);
-      return null;
+  // private getPrimaryUri(data: pasteboard.PasteData): string {
+  //   try {
+  //     return data.getPrimaryUri();
+  //   } catch (_) {
+  //     return '';
+  //   }
+  // }
+
+  private getPrimaryMimeType(data: pasteboard.PasteData): string {
+    try {
+      return data.getPrimaryMimeType();
+    } catch (_) {
+      return '';
     }
   }
 
-  /**
-   * Lấy tất cả nội dung clipboard (text + ảnh)
-   */
-  async getClipboardContent(): Promise<ClipboardItem | null> {
+  private getPasteTimestamp(data: pasteboard.PasteData): number {
+    try {
+      const property = data.getProperty();
+      return property.timestamp > 0 ? property.timestamp : Date.now();
+    } catch (_) {
+      return Date.now();
+    }
+  }
+
+  async readTextItems(): Promise<ClipboardReadResult> {
     try {
       const pb = pasteboard.getSystemPasteboard();
-      const data = await pb.getData();
-      if (!data) return null;
-
-      const mimeTypes = data.getMimeTypes();
-      const item: ClipboardItem = { type: 'text', timestamp: Date.now() };
-
-      if (mimeTypes.includes(pasteboard.MIMETYPE_TEXT_HTML)) {
-        item.type = 'html';
-        item.html = data.getPrimaryHtml() || '';
-        item.text = item.html.replace(/<[^>]*>/g, ''); // strip HTML tags
-      } else if (mimeTypes.includes(pasteboard.MIMETYPE_TEXT_PLAIN)) {
-        item.type = 'text';
-        item.text = data.getPrimaryText() || '';
-      } else if (mimeTypes.includes(pasteboard.MIMETYPE_PIXELMAP)) {
-        item.type = 'image';
-        item.pixelMap = data.getPrimaryPixelMap() || undefined;
+      const hasData = await pb.hasData();
+      if (!hasData) {
+        return { items: [], message: 'Clipboard đang trống.' };
       }
 
-      if (item.text || item.pixelMap) {
-        // Thêm vào lịch sử nếu chưa có
-        const isDuplicate = this.history.some(h =>
-          h.type === item.type &&
-          h.text === item.text &&
-          h.type !== 'image'
-        );
-        if (!isDuplicate) {
-          this.history.unshift(item);
-          if (this.history.length > this.maxHistory) {
-            this.history.pop();
-          }
+      const data = await pb.getData();
+      if (!data) {
+        return { items: [], message: 'Không đọc được dữ liệu clipboard.' };
+      }
+
+      const now = this.getPasteTimestamp(data);
+      const items: ClipboardItem[] = [];
+      this.pushText(items, this.getPrimaryText(data), now);
+      // this.pushHtml(items, this.getPrimaryHtml(data), now);
+      const primaryMimeType = this.getPrimaryMimeType(data);
+      // this.pushUri(items, this.getPrimaryUri(data), primaryMimeType, now);
+
+      const count = Math.min(data.getRecordCount(), 5);
+      for (let i = 0; i < count; i++) {
+        const record = data.getRecord(i);
+        this.pushText(items, record.plainText, now);
+        // this.pushHtml(items, record.htmlText, now);
+        // this.pushUri(items, record.uri, record.mimeType, now);
+        if (items.length >= 5) {
+          break;
         }
-        return item;
       }
-      return null;
+
+      if (items.length === 0) {
+        return { items: [], message: 'Clipboard có dữ liệu nhưng chưa hỗ trợ loại này.' };
+      }
+      return { items, message: '' };
     } catch (err) {
-      console.error('ClipboardManager: getClipboardContent failed:', err);
-      return null;
+      console.error('ClipboardManager: readTextItems failed:', err);
+      return {
+        items: [],
+        message: 'Không đọc được clipboard. Hãy kiểm tra quyền READ_PASTEBOARD.'
+      };
     }
-  }
-
-  /**
-   * Kiểm tra clipboard có nội dung text không
-   */
-  async hasText(): Promise<boolean> {
-    try {
-      const pb = pasteboard.getSystemPasteboard();
-      const data = await pb.getData();
-      return data !== null && data !== undefined;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Lấy lịch sử clipboard
-   */
-  getHistory(): ClipboardItem[] {
-    return [...this.history];
-  }
-
-  /**
-   * Xóa lịch sử clipboard
-   */
-  clearHistory(): void {
-    this.history = [];
   }
 }

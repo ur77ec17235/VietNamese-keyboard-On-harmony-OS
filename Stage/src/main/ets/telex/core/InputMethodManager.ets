@@ -41,8 +41,10 @@ export class InputMethodManager {
 
   constructor() {
     this.engines = new Map<InputMode, InputEngineBase>();
-    this.engines.set(InputMode.TELEX, new TelexEngine());
-    this.engines.set(InputMode.VNI, new VniEngine());
+    this.engines.set(InputMode.TELEX, new TelexEngine(true));
+    this.engines.set(InputMode.TELEX_SIMPLE, new TelexEngine(false));
+    this.engines.set(InputMode.VNI, new VniEngine(true));
+    this.engines.set(InputMode.VNI_SIMPLE, new VniEngine(false));
     this.engines.set(InputMode.ENGLISH, new EnglishEngine());
     this.currentMode = InputMode.TELEX;
   }
@@ -59,7 +61,7 @@ export class InputMethodManager {
   }
 
   cycleMode(): InputMode {
-    const modes = [InputMode.TELEX, InputMode.VNI, InputMode.ENGLISH];
+    const modes = [InputMode.TELEX, InputMode.TELEX_SIMPLE, InputMode.VNI, InputMode.VNI_SIMPLE, InputMode.ENGLISH];
     const idx = modes.indexOf(this.currentMode);
     const next = modes[(idx + 1) % modes.length];
     this.setMode(next);
@@ -68,8 +70,10 @@ export class InputMethodManager {
 
   getModeName(): string {
     switch (this.currentMode) {
-      case InputMode.TELEX: return 'VI-Telex';
-      case InputMode.VNI: return 'VI-VNI';
+      case InputMode.TELEX: return 'VI-Telex Full';
+      case InputMode.TELEX_SIMPLE: return 'VI-Telex Simple';
+      case InputMode.VNI: return 'VI-VNI Full';
+      case InputMode.VNI_SIMPLE: return 'VI-VNI Simple';
       case InputMode.ENGLISH: return 'EN';
       default: return 'VI';
     }
@@ -100,6 +104,10 @@ export class InputMethodManager {
 
   toggleCapsLock(): void {
     this.isCapsLock = !this.isCapsLock;
+    this.isShiftActive = false;
+  }
+
+  clearShift(): void {
     this.isShiftActive = false;
   }
 

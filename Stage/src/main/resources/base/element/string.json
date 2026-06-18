@@ -33,6 +33,30 @@
       "value": "English"
     },
     {
+      "name": "permission_reason_microphone",
+      "value": "Cần quyền micro để nhập tiếng Việt bằng giọng nói"
+    },
+    {
+      "name": "permission_reason_media",
+      "value": "Cần quyền ảnh và video để chọn ảnh nền hoặc sticker GIF"
+    },
+    {
+      "name": "permission_reason_audio",
+      "value": "Cần quyền âm thanh để chọn âm phím từ thiết bị"
+    },
+    {
+      "name": "permission_reason_file",
+      "value": "Cần quyền tài liệu để chọn file sticker, âm phím và ảnh nền"
+    },
+    {
+      "name": "permission_reason_network",
+      "value": "Cần quyền mạng để dịch, tải model và tải gói ngôn ngữ"
+    },
+    {
+      "name": "permission_reason_startup",
+      "value": "Cần quyền khởi động để chuẩn bị dịch vụ bàn phím sau khi bật máy"
+    },
+    {
       "name": "permission_reason_clipboard",
       "value": "Cần quyền này để đọc và dán nội dung từ clipboard"
     }

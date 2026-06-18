@@ -5,6 +5,13 @@
  */
 
 import { InputMode } from '../core/InputEngineBase';
+import { DEFAULT_KEYBOARD_BG_COLOR, DEFAULT_KEYBOARD_KEY_COLOR, getVirtualKeyboardKeyBg,
+  getVirtualKeyboardTheme, VirtualKeyboardTheme } from './KeyboardTheme';
+export { DEFAULT_KEYBOARD_BG_COLOR, DEFAULT_KEYBOARD_DARK_MODE, DEFAULT_KEYBOARD_KEY_COLOR,
+  DEFAULT_KEYBOARD_KEY_OPACITY, DEFAULT_KEYBOARD_OPACITY, getKeyboardTextColor,
+  getVirtualKeyboardKeyBg, getVirtualKeyboardTheme, GTV_BG_COLOR_KEY, GTV_BG_OPACITY_KEY,
+  GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_KEY_OPACITY_KEY, GTV_SHOW_NUMBER_ROW_KEY,
+  KEYBOARD_COLOR_PALETTE, KEYBOARD_OPACITY_OPTIONS, KEYBOARD_THEME_PRESETS, normalizeKeyboardOpacity } from './KeyboardTheme';
 
 type KeyLayout = 'letters' | 'numbers' | 'symbols';
 
@@ -61,11 +68,13 @@ export struct VirtualKeyboard {
   };
 
   // Theme
-  private bgColor = '#1A1A2E';
-  private keyBg = '#16213E';
-  private specialBg = '#0F3460';
-  private accentColor = '#E94560';
-  private textColor = '#EAEAEA';
+  @Prop bgColor = DEFAULT_KEYBOARD_BG_COLOR;
+  @Prop keyBg = DEFAULT_KEYBOARD_KEY_COLOR;
+  @Prop darkMode: boolean = false;
+
+  private kbTheme(): VirtualKeyboardTheme {
+    return getVirtualKeyboardTheme(this.bgColor, this.keyBg, this.darkMode);
+  }
 
   getModeShortLabel(): string {
     switch (this.inputMode) {
@@ -121,11 +130,7 @@ export struct VirtualKeyboard {
   }
 
   getKeyBg(key: string): ResourceColor {
-    if (key === this.pressedKey) return this.accentColor;
-    if (key === 'SHIFT' && this.isShifted) return this.accentColor;
-    if (key === 'LANG') return '#1A3A6E';
-    if (this.isSpecialKey(key)) return this.specialBg;
-    return this.keyBg;
+    return getVirtualKeyboardKeyBg(key, this.kbTheme(), this.pressedKey, this.isShifted, this.isSpecialKey(key));
   }
 
   getCurrentRows(): string[][] {
@@ -154,6 +159,12 @@ export struct VirtualKeyboard {
     setTimeout(() => { this.pressedKey = ''; }, 80);
   }
 
+  onKeyTouch(key: string, event: TouchEvent): void {
+    if (event.type === TouchType.Down) {
+      this.onPress(key);
+    }
+  }
+
   build() {
     Column() {
       ForEach(this.getCurrentRows(), (row: string[]) => {
@@ -168,7 +179,7 @@ export struct VirtualKeyboard {
 
               Text(this.getKeyLabel(key))
                 .fontSize(this.isSpecialKey(key) ? 12 : 17)
-                .fontColor(this.textColor)
+                .fontColor(this.kbTheme().textColor)
                 .fontWeight(this.isSpecialKey(key) ? FontWeight.Medium : FontWeight.Regular)
                 .textAlign(TextAlign.Center)
                 .maxLines(1)
@@ -176,7 +187,9 @@ export struct VirtualKeyboard {
             .width(this.getKeyWidth(key))
             .height(48)
             .margin(2)
-            .onClick(() => this.onPress(key))
+            .onTouch((event: TouchEvent) => {
+              this.onKeyTouch(key, event);
+            })
           })
         }
         .width('100%')
@@ -185,7 +198,7 @@ export struct VirtualKeyboard {
       })
     }
     .width('100%')
-    .backgroundColor(this.bgColor)
+    .backgroundColor(this.kbTheme().bgColor)
     .padding({ top: 4, bottom: 8, left: 2, right: 2 })
   }
 }

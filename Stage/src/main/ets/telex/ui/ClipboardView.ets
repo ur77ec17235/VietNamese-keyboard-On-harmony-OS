@@ -1,6 +1,6 @@
 /**
  * ClipboardView.ets
- * Panel hiển thị clipboard - text và ảnh đã copy
+ * Panel hiển thị clipboard text
  */
 
 import { ClipboardItem } from '../service/ClipboardManager';
@@ -57,29 +57,27 @@ export struct ClipboardView {
         Scroll() {
           Column() {
             ForEach(this.items, (item: ClipboardItem) => {
-              if (item.type === 'text' || item.type === 'html') {
-                Row() {
-                  Text(item.text || '')
-                    .fontSize(13)
-                    .fontColor('#CCCCEE')
-                    .maxLines(2)
-                    .textOverflow({ overflow: TextOverflow.Ellipsis })
-                    .layoutWeight(1)
-                    .margin({ right: 8 })
+              Row() {
+                Text(item.text)
+                  .fontSize(13)
+                  .fontColor('#CCCCEE')
+                  .maxLines(2)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                  .margin({ right: 8 })
 
-                  Button('Dán')
-                    .fontSize(12)
-                    .fontColor('#4FC3F7')
-                    .height(28)
-                    .backgroundColor('#1A1A40')
-                    .borderRadius(6)
-                    .onClick(() => this.callbacks.onPasteText(item.text || ''))
-                }
-                .width('100%')
-                .padding({ left: 10, right: 10, top: 8, bottom: 8 })
-                .borderBottom({ width: 1, color: '#1E1E3A' })
-                .alignItems(VerticalAlign.Center)
+                Button('Dán')
+                  .fontSize(12)
+                  .fontColor('#4FC3F7')
+                  .height(28)
+                  .backgroundColor('#1A1A40')
+                  .borderRadius(6)
+                  .onClick(() => this.callbacks.onPasteText(item.text))
               }
+              .width('100%')
+              .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+              .borderBottom({ width: 1, color: '#1E1E3A' })
+              .alignItems(VerticalAlign.Center)
             })
           }
         }

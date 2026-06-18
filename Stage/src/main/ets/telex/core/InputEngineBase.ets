@@ -29,6 +29,8 @@ export interface InputEngineBase {
 
 export enum InputMode {
   TELEX = 'telex',
+  TELEX_SIMPLE = 'telex_simple',
   VNI = 'vni',
+  VNI_SIMPLE = 'vni_simple',
   ENGLISH = 'en'
 }
