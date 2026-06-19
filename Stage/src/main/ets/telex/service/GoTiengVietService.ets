@@ -1,3 +1,4 @@
+
 /**
  * GoTiengVietService.ets
  * Input Method Extension Service cho HarmonyOS 5.1
@@ -17,11 +18,29 @@ import { KeyboardBridge } from './KeyboardBridge';
 import display from '@ohos.display';
 import { pasteboard } from '@kit.BasicServicesKit';
 import { PreferencesManager } from '../core/PreferencesManager';
+import commonEventManager from '@ohos.commonEventManager';
 import { DEFAULT_KEYBOARD_BG_COLOR, DEFAULT_KEYBOARD_DARK_MODE, DEFAULT_KEYBOARD_KEY_COLOR,
   DEFAULT_KEYBOARD_KEY_OPACITY, DEFAULT_KEYBOARD_OPACITY, GTV_BG_COLOR_KEY, GTV_BG_OPACITY_KEY,
-  GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_KEY_OPACITY_KEY, GTV_SHOW_NUMBER_ROW_KEY } from '../ui/KeyboardTheme';
+  GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_TEXT_COLOR_KEY, DEFAULT_KEYBOARD_TEXT_COLOR, GTV_KEY_OPACITY_KEY, GTV_SHOW_NUMBER_ROW_KEY } from '../ui/KeyboardTheme';
 import { CORE_CANDIDATE_WORDS, EXTRA_CANDIDATE_WORDS } from '../dictionary/CandidateDictionary';
-
+import {
+  GTV_KEY_SIZE_LABEL_KEY,
+  GTV_SOUND_ENABLED_KEY,
+  GTV_VIBRATION_ENABLED_KEY,
+  GTV_CLIPBOARD_ENABLED_KEY,
+  GTV_SUGGESTION_ENABLED_KEY,
+  DEFAULT_KEY_SIZE_LABEL,
+  DEFAULT_SOUND_ENABLED,
+  DEFAULT_VIBRATION_ENABLED,
+  DEFAULT_CLIPBOARD_ENABLED,
+  DEFAULT_SUGGESTION_ENABLED,
+  GTV_KEYBOARD_HEIGHT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY,
+  DEFAULT_KEYBOARD_HEIGHT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP
+} from '../core/KeyboardSettingsKeys';
 
 // AppStorage keys để sync state với UI
 export const KEY_INPUT_MODE = 'gtv_inputMode';
@@ -31,9 +50,16 @@ export const KEY_IS_SHIFTED = 'gtv_isShifted';
 export const KEY_SHOW_CLIPBOARD = 'gtv_showClipboard';
 export const KEY_CLIPBOARD_ITEMS = 'gtv_clipboardItems';
 export const KEY_CLIPBOARD_STATUS = 'gtv_clipboardStatus';
+export const KEY_INPUT_PATTERN = 'gtv_inputPattern';
+export const KEY_ENTER_KEY_TYPE = 'gtv_enterKeyType';
 
 const GTV_BUNDLE_NAME = 'com.example.gotiengviet';
 const GTV_MAIN_ABILITY = 'StageAbility';
+const GTV_SETTINGS_CHANGED_EVENT = 'com.example.gotiengviet.SETTINGS_CHANGED';
+const GTV_LEGACY_THEME_CHANGED_EVENT = 'com.example.gotiengviet.THEME_CHANGED';
+
+export const KEY_CURSOR_LEFT = '__GTV_CURSOR_LEFT__';
+export const KEY_CURSOR_RIGHT = '__GTV_CURSOR_RIGHT__';
 
 interface RankedCandidate {
   word: string;
@@ -62,6 +88,7 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
   private panelReady: boolean = false;
   private userRequestedHide: boolean = false;
   private lastLandscape: boolean = false;
+  private settingsSubscriber: commonEventManager.CommonEventSubscriber | null = null;
 
   private async loadAppearanceSettings(forceRefresh: boolean = false): Promise<void> {
     await PreferencesManager.init(this.context, forceRefresh);
@@ -70,14 +97,146 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
     const showNumberRow = await PreferencesManager.get(GTV_SHOW_NUMBER_ROW_KEY, true) as boolean;
     const bgColor = await PreferencesManager.get(GTV_BG_COLOR_KEY, DEFAULT_KEYBOARD_BG_COLOR) as string;
     const keyColor = await PreferencesManager.get(GTV_KEY_COLOR_KEY, DEFAULT_KEYBOARD_KEY_COLOR) as string;
+    const textColor = await PreferencesManager.get(GTV_TEXT_COLOR_KEY, DEFAULT_KEYBOARD_TEXT_COLOR) as string;
     const darkMode = await PreferencesManager.get(GTV_DARK_MODE_KEY, DEFAULT_KEYBOARD_DARK_MODE) as boolean;
+    const keySizeLabel = await PreferencesManager.get(GTV_KEY_SIZE_LABEL_KEY, DEFAULT_KEY_SIZE_LABEL) as string;
+    const soundEnabled = await PreferencesManager.get(GTV_SOUND_ENABLED_KEY, DEFAULT_SOUND_ENABLED) as boolean;
+    const vibrationEnabled = await PreferencesManager.get(GTV_VIBRATION_ENABLED_KEY, DEFAULT_VIBRATION_ENABLED) as boolean;
+    const clipboardEnabled = await PreferencesManager.get(GTV_CLIPBOARD_ENABLED_KEY, DEFAULT_CLIPBOARD_ENABLED) as boolean;
+    const suggestionEnabled = await PreferencesManager.get(GTV_SUGGESTION_ENABLED_KEY, DEFAULT_SUGGESTION_ENABLED) as boolean;
+    const legacyHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_VP_KEY, 0) as number;
+    let portraitHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, 0) as number;
+    if (portraitHeightVp === 0) {
+      portraitHeightVp = legacyHeightVp > 0 ? legacyHeightVp : DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP;
+    }
+    let landscapeHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, 0) as number;
+    if (landscapeHeightVp === 0) {
+      landscapeHeightVp = DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP;
+    }
+    const currentHeightVp = this.lastLandscape ? landscapeHeightVp : portraitHeightVp;
 
+    AppStorage.setOrCreate(GTV_KEY_SIZE_LABEL_KEY, keySizeLabel);
+    AppStorage.setOrCreate(GTV_SOUND_ENABLED_KEY, soundEnabled);
+    AppStorage.setOrCreate(GTV_VIBRATION_ENABLED_KEY, vibrationEnabled);
+    AppStorage.setOrCreate(GTV_CLIPBOARD_ENABLED_KEY, clipboardEnabled);
+    AppStorage.setOrCreate(GTV_SUGGESTION_ENABLED_KEY, suggestionEnabled);
+    AppStorage.setOrCreate(GTV_KEYBOARD_HEIGHT_VP_KEY, currentHeightVp);
+    AppStorage.setOrCreate(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, portraitHeightVp);
+    AppStorage.setOrCreate(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, landscapeHeightVp);
     AppStorage.setOrCreate(GTV_BG_OPACITY_KEY, bgOpacity);
     AppStorage.setOrCreate(GTV_KEY_OPACITY_KEY, keyOpacity);
     AppStorage.setOrCreate(GTV_SHOW_NUMBER_ROW_KEY, showNumberRow);
     AppStorage.setOrCreate(GTV_BG_COLOR_KEY, bgColor);
     AppStorage.setOrCreate(GTV_KEY_COLOR_KEY, keyColor);
+    AppStorage.setOrCreate(GTV_TEXT_COLOR_KEY, textColor);
     AppStorage.setOrCreate(GTV_DARK_MODE_KEY, darkMode);
+  }
+
+  private subscribeSettingsChanged(): void {
+    if (this.settingsSubscriber) {
+      return;
+    }
+
+    const subscribeInfo: commonEventManager.CommonEventSubscribeInfo = {
+      events: [GTV_SETTINGS_CHANGED_EVENT, GTV_LEGACY_THEME_CHANGED_EVENT]
+    };
+
+        commonEventManager.createSubscriber(subscribeInfo, (err: Error, subscriber: commonEventManager.CommonEventSubscriber) => {
+      if (err) {
+        console.error('[GoTiengViet] create settings subscriber failed:', err.message);
+        return;
+      }
+
+      this.settingsSubscriber = subscriber;
+      commonEventManager.subscribe(subscriber, (subscribeErr: Error, data: commonEventManager.CommonEventData) => {
+        if (subscribeErr) {
+          console.error('[GoTiengViet] settings changed event error:', subscribeErr.message);
+          return;
+        }
+        this.reloadKeyboardSettingsFromPayload(data);
+      });
+    });
+  }
+
+  private unsubscribeSettingsChanged(): void {
+    if (!this.settingsSubscriber) {
+      return;
+    }
+
+    commonEventManager.unsubscribe(this.settingsSubscriber, (err: Error) => {
+      if (err) {
+        console.error('[GoTiengViet] unsubscribe settings failed:', err.message);
+      }
+    });
+    this.settingsSubscriber = null;
+  }
+
+  private reloadKeyboardSettingsFromPayload(eventData: commonEventManager.CommonEventData): void {
+    if (eventData && eventData.data) {
+      try {
+        let payload = JSON.parse(eventData.data) as Record<string, Object>;
+        if (payload['backgroundOpacity'] !== undefined) { AppStorage.setOrCreate(GTV_BG_OPACITY_KEY, payload['backgroundOpacity'] as number); PreferencesManager.set(GTV_BG_OPACITY_KEY, payload['backgroundOpacity'] as number); }
+        if (payload['keyOpacity'] !== undefined) { AppStorage.setOrCreate(GTV_KEY_OPACITY_KEY, payload['keyOpacity'] as number); PreferencesManager.set(GTV_KEY_OPACITY_KEY, payload['keyOpacity'] as number); }
+        if (payload['bgBaseColor'] !== undefined) { AppStorage.setOrCreate(GTV_BG_COLOR_KEY, payload['bgBaseColor'] as string); PreferencesManager.set(GTV_BG_COLOR_KEY, payload['bgBaseColor'] as string); }
+        if (payload['keyBaseColor'] !== undefined) { AppStorage.setOrCreate(GTV_KEY_COLOR_KEY, payload['keyBaseColor'] as string); PreferencesManager.set(GTV_KEY_COLOR_KEY, payload['keyBaseColor'] as string); }
+        if (payload['textBaseColor'] !== undefined) { AppStorage.setOrCreate(GTV_TEXT_COLOR_KEY, payload['textBaseColor'] as string); PreferencesManager.set(GTV_TEXT_COLOR_KEY, payload['textBaseColor'] as string); }
+        if (payload['darkMode'] !== undefined) { AppStorage.setOrCreate(GTV_DARK_MODE_KEY, payload['darkMode'] as boolean); PreferencesManager.set(GTV_DARK_MODE_KEY, payload['darkMode'] as boolean); }
+        if (payload['keyboardPortraitHeightVp'] !== undefined) { AppStorage.setOrCreate(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, payload['keyboardPortraitHeightVp'] as number); PreferencesManager.set(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, payload['keyboardPortraitHeightVp'] as number); }
+        if (payload['keyboardLandscapeHeightVp'] !== undefined) { AppStorage.setOrCreate(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, payload['keyboardLandscapeHeightVp'] as number); PreferencesManager.set(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, payload['keyboardLandscapeHeightVp'] as number); }
+        // Removed keyboardWindowHeight write to GTV_KEYBOARD_HEIGHT_VP_KEY to prevent overlap
+        if (payload['fontWeightLevel'] !== undefined) { AppStorage.setOrCreate(GTV_KEY_SIZE_LABEL_KEY, payload['fontWeightLevel'] as string); PreferencesManager.set(GTV_KEY_SIZE_LABEL_KEY, payload['fontWeightLevel'] as string); }
+        if (payload['sound'] !== undefined) { AppStorage.setOrCreate(GTV_SOUND_ENABLED_KEY, payload['sound'] as boolean); PreferencesManager.set(GTV_SOUND_ENABLED_KEY, payload['sound'] as boolean); }
+        if (payload['vibration'] !== undefined) { AppStorage.setOrCreate(GTV_VIBRATION_ENABLED_KEY, payload['vibration'] as boolean); PreferencesManager.set(GTV_VIBRATION_ENABLED_KEY, payload['vibration'] as boolean); }
+        if (payload['clipboardDailyStore'] !== undefined) { AppStorage.setOrCreate(GTV_CLIPBOARD_ENABLED_KEY, payload['clipboardDailyStore'] as boolean); PreferencesManager.set(GTV_CLIPBOARD_ENABLED_KEY, payload['clipboardDailyStore'] as boolean); }
+        if (payload['numberRowEnabled'] !== undefined) { AppStorage.setOrCreate(GTV_SHOW_NUMBER_ROW_KEY, payload['numberRowEnabled'] as boolean); PreferencesManager.set(GTV_SHOW_NUMBER_ROW_KEY, payload['numberRowEnabled'] as boolean); }
+        
+        console.info('[GoTiengViet] Successfully synced settings from app payload');
+        if (this.panel) {
+          this.refreshPanelLayout().catch((err: Error) => {
+            console.error('[GoTiengViet] refresh layout after payload failed:', err.message);
+          });
+        }
+        return;
+      } catch (e) {
+        console.error('[GoTiengViet] Parse payload failed:', e);
+      }
+    }
+    // Fallback if payload missing or unparseable
+    this.reloadKeyboardSettingsFromApp();
+  }
+
+  private reloadKeyboardSettingsFromApp(): void {
+    this.loadAppearanceSettings(true).then(() => {
+      if (this.panel) {
+        this.refreshPanelLayout().catch((err: Error) => {
+          console.error('[GoTiengViet] refresh layout after settings changed failed:', err.message);
+        });
+      }
+    }).catch((err: Error) => {
+      console.error('[GoTiengViet] reload settings from app failed:', err.message);
+    });
+  }
+
+  private clearComposingForCursorMove(): void {
+    this.currentComposing = '';
+    this.imeManager.reset();
+    AppStorage.set(KEY_COMPOSING, '');
+    AppStorage.set(KEY_CANDIDATES, [] as string[]);
+  }
+
+  private async moveCursor(direction: number): Promise<void> {
+    if (!this.inputClient) {
+      return;
+    }
+
+    try {
+      this.clearComposingForCursorMove();
+      this.inputClient.moveCursor(direction).catch((err: Error) => {
+        console.error('[GoTiengViet] moveCursor error:', err);
+      });
+    } catch (err) {
+      console.error('[GoTiengViet] moveCursor try-catch error:', err);
+    }
   }
 
   onCreate(want: Want): void {
@@ -91,16 +250,35 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
     AppStorage.setOrCreate(KEY_SHOW_CLIPBOARD, false);
     AppStorage.setOrCreate(KEY_CLIPBOARD_ITEMS, []);
     AppStorage.setOrCreate(KEY_CLIPBOARD_STATUS, '');
+    AppStorage.setOrCreate(KEY_INPUT_PATTERN, 0); // TEXT = 0
+    AppStorage.setOrCreate(KEY_ENTER_KEY_TYPE, 0); // UNSPECIFIED = 0
 
     // Khởi tạo Preferences và load cấu hình giao diện
-    this.loadAppearanceSettings().catch((err: Error) => {
+    PreferencesManager.init(this.context, true).then(() => {
+      this.loadAppearanceSettings(false);
+    }).catch((err: Error) => {
       console.error('[GoTiengViet] load appearance settings failed:', err.message);
     });
 
+    try {
+      display.on('change', (id: number) => {
+        console.info(`[GoTiengViet] display changed, id=${id}, isShowing=${this.isShowing}`);
+        if (this.isShowing) {
+          this.refreshPanelLayout().catch((err: Error) => {
+            console.error('[GoTiengViet] refreshPanelLayout on display change error:', err);
+          });
+        }
+      });
+    } catch (e) {
+      console.error('[GoTiengViet] Register display.on error: ' + e);
+    }
+
     // Đăng ký bridge handlers để UI gửi events vào service
     this.registerBridgeHandlers();
+    this.subscribeSettingsChanged();
 
     const ima = inputMethodEngine.getInputMethodAbility();
+
 
     // === Lắng nghe input lifecycle ===
     ima.on('inputStart', (kbController: inputMethodEngine.KeyboardController,
@@ -118,6 +296,16 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       this.userRequestedHide = false;
       AppStorage.set(KEY_COMPOSING, '');
       AppStorage.set(KEY_CANDIDATES, [] as string[]);
+      
+      try {
+        const attr = this.inputClient.getEditorAttributeSync();
+        AppStorage.set(KEY_INPUT_PATTERN, attr.inputPattern ?? 0);
+        AppStorage.set(KEY_ENTER_KEY_TYPE, attr.enterKeyType ?? 0);
+        console.info(`[GoTiengViet] editor attribute: pattern=${attr.inputPattern}, enterType=${attr.enterKeyType}`);
+      } catch (e) {
+        console.error('[GoTiengViet] getEditorAttributeSync failed: ' + e);
+      }
+
       this.isShowing = true;
       this.startClipboardPolling();
     });
@@ -132,6 +320,18 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       // this.stopClipboardPolling();
       AppStorage.set(KEY_COMPOSING, '');
       AppStorage.set(KEY_CANDIDATES, [] as string[]);
+    });
+
+    const kd = inputMethodEngine.getKeyboardDelegate();
+    kd.on('editorAttributeChanged', (attr: inputMethodEngine.EditorAttribute) => {
+      console.info(`[GoTiengViet] editorAttributeChanged: pattern=${attr.inputPattern}, enterType=${attr.enterKeyType}`);
+      AppStorage.set(KEY_INPUT_PATTERN, attr.inputPattern ?? 0);
+      AppStorage.set(KEY_ENTER_KEY_TYPE, attr.enterKeyType ?? 0);
+      if (this.isShowing) {
+        this.refreshPanelLayout().catch((err: Error) => {
+          console.error('[GoTiengViet] refreshPanelLayout in editorAttributeChanged error:', err);
+        });
+      }
     });
 
     ima.on('keyboardShow', () => {
@@ -175,6 +375,28 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
     this.createKeyboardPanel(ima);
   }
 
+    private async registerSettingsChangedListener(): Promise<void> {
+    try {
+      const subscribeInfo: commonEventManager.CommonEventSubscribeInfo = {
+        events: [GTV_SETTINGS_CHANGED_EVENT]
+      };
+
+      this.settingsSubscriber =
+        await commonEventManager.createSubscriber(subscribeInfo);
+
+      commonEventManager.subscribe(
+        this.settingsSubscriber,
+        async (err: Error, data: commonEventManager.CommonEventData) => {
+          console.info('[GoTiengViet] settings changed in listener');
+          this.reloadKeyboardSettingsFromPayload(data);
+        }
+      );
+    } catch (err) {
+      console.error('[GoTiengViet] registerSettingsChangedListener failed: '
+        + JSON.stringify(err));
+    }
+  }
+
   private registerBridgeHandlers(): void {
     // Nhận phím từ UI keyboard
     KeyboardBridge.registerKeyHandler((key: string) => {
@@ -189,6 +411,21 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       this.loadAppearanceSettings(true).catch((err: Error) => {
         console.error('Reload theme from settings failed:', err.message);
       });
+      this.refreshPanelLayout().catch((err: Error) => {
+        console.error('refreshPanelLayout after theme change failed:', err.message);
+      });
+    });
+
+    KeyboardBridge.registerLiveResizeHandler((heightVp: number) => {
+      if (!this.panel) return;
+      const d = display.getDefaultDisplaySync();
+      const density = d.densityPixels > 0 ? d.densityPixels : 3.0;
+      const kbHeightPx = Math.round(heightVp * density);
+      this.panel.resize(d.width, kbHeightPx).catch((err: Error) => {
+        console.error('[GoTiengViet] live resize failed:', err.message);
+      });
+      AppStorage.setOrCreate('gtv_panelHeightVp', heightVp);
+      AppStorage.setOrCreate('gtv_panelHeight', kbHeightPx);
     });
 
     // Shift
@@ -327,12 +564,40 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
 
     // Dọc: 40% chiều cao màn hình
     // Ngang: 42% chiều cao màn hình (shorter side) – bàn phím ngang thường ~40-45%
-    const kbHeightPx = isLandscape
-      ? Math.round(d.height * 0.62)
-      : Math.round(d.height * 0.40);
+    // const kbHeightPx = isLandscape
+    //   ? Math.round(d.height * 0.62)
+    //   : Math.round(d.height * 0.40);
 
     // Chuyển px sang vp cho UI layout
     const density = d.densityPixels > 0 ? d.densityPixels : 3.0;
+
+    await PreferencesManager.init(this.context, true);
+    const legacyHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_VP_KEY, 0) as number;
+    let portraitHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, 0) as number;
+    if (portraitHeightVp === 0) {
+      portraitHeightVp = legacyHeightVp > 0 ? legacyHeightVp : DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP;
+    }
+    let landscapeHeightVp = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, 0) as number;
+    if (landscapeHeightVp === 0) {
+      landscapeHeightVp = DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP;
+    }
+    const savedHeightVp = isLandscape ? landscapeHeightVp : portraitHeightVp; // Đây là chiều cao cơ bản (5 hàng)
+
+    const showNumberRow = await PreferencesManager.get(GTV_SHOW_NUMBER_ROW_KEY, true) as boolean;
+    const keyHeightVp = Math.round(savedHeightVp / 5);
+    let targetHeightVp = showNumberRow ? savedHeightVp + keyHeightVp : savedHeightVp;
+
+    const inputPattern = AppStorage.get<number>(KEY_INPUT_PATTERN) || 0;
+    const isNumber = [2, 3, 8, 12].includes(inputPattern);
+    if (isNumber) {
+      targetHeightVp = isLandscape ? 200 : 320;
+    }
+
+    const preferredPx = Math.round(targetHeightVp * density);
+    const maxPx = Math.round(d.height * 0.70);
+    const minPx = isLandscape ? Math.round(d.height * 0.35) : Math.round(d.height * 0.25);
+
+    const kbHeightPx = Math.min(maxPx, Math.max(minPx, preferredPx));
     const kbHeightVp = Math.round(kbHeightPx / density);
 
     await this.panel.resize(d.width, kbHeightPx);
@@ -402,8 +667,41 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
   private async handleVirtualKey(key: string): Promise<void> {
     if (!this.inputClient) return;
 
+    AppStorage.setOrCreate('gtv_latest_copied', '');
+
+    if (key === KEY_CURSOR_LEFT) {
+      this.moveCursor(inputMethodEngine.Direction.CURSOR_LEFT)
+        .catch((e: Error) => {
+          console.error('[GoTiengViet] move cursor left failed: ' + e.message);
+        });
+      return;
+    }
+
+    if (key === KEY_CURSOR_RIGHT) {
+      this.moveCursor(inputMethodEngine.Direction.CURSOR_RIGHT)
+        .catch((e: Error) => {
+          console.error('[GoTiengViet] move cursor right failed: ' + e.message);
+        });
+      return;
+    }
+
     if (key === 'DeleteWord') {
       this.handleDeleteWord();
+      return;
+    }
+
+    const inputPattern = AppStorage.get<number>(KEY_INPUT_PATTERN) || 0;
+    const isPassword = [7, 8, 9, 11].includes(inputPattern);
+
+    if (isPassword) {
+      if (key === '{backspace}') {
+        this.inputClient.deleteForward(1).catch((e: Error) => console.error('[GoTiengViet] deleteForward error', e));
+      } else {
+        this.inputClient.insertText(key).catch((e: Error) => console.error('[GoTiengViet] insertText error', e));
+      }
+      this.currentComposing = '';
+      AppStorage.set(KEY_COMPOSING, '');
+      AppStorage.set(KEY_CANDIDATES, [] as string[]);
       return;
     }
 
@@ -628,6 +926,7 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       }
       this.inputClient.insertText(text).catch((e: Error) => console.error('[GoTiengViet] insertText error', e));
       this.currentComposing = '';
+      AppStorage.setOrCreate('gtv_latest_copied', '');
       this.imeManager.reset();
       AppStorage.set(KEY_COMPOSING, '');
       AppStorage.set(KEY_CANDIDATES, [] as string[]);
@@ -697,13 +996,18 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
   }
 
   private isWordChar(ch: string): boolean {
-    return /^[0-9A-Za-zÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ_]$/.test(ch);
+    return /^[0-9A-Za-zÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởữùúụủũưừứựửữỳýỵỷỹđ_]$/.test(ch);
   }
 
   private async handleEnter(): Promise<void> {
     if (!this.inputClient) return;
     try {
-      this.inputClient.insertText('\n').catch((e: Error) => console.error('[GoTiengViet] insertText error', e));
+      const enterKeyType = AppStorage.get<number>(KEY_ENTER_KEY_TYPE) || 0;
+      if (enterKeyType === 0 || enterKeyType === 1) { // UNSPECIFIED or NONE
+        this.inputClient.insertText('\n').catch((e: Error) => console.error('[GoTiengViet] insertText error', e));
+      } else {
+        this.inputClient.sendKeyFunction(enterKeyType).catch((e: Error) => console.error('[GoTiengViet] sendKeyFunction error', e));
+      }
       this.currentComposing = '';
       this.imeManager.reset();
       AppStorage.set(KEY_COMPOSING, '');
@@ -718,6 +1022,7 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
     try {
       this.inputClient.insertText(text).catch((e: Error) => console.error('[GoTiengViet] insertText error', e));
       this.currentComposing = '';
+      AppStorage.setOrCreate('gtv_latest_copied', '');
       this.imeManager.reset();
       AppStorage.set(KEY_COMPOSING, '');
       AppStorage.set(KEY_CANDIDATES, [] as string[]);
@@ -788,6 +1093,9 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
       this.clipboardItems = this.mergeClipboardItems(result.items, this.clipboardItems);
       AppStorage.set(KEY_CLIPBOARD_ITEMS, this.clipboardItems);
       AppStorage.set(KEY_CLIPBOARD_STATUS, result.message);
+      if (result.items.length > 0) {
+        AppStorage.setOrCreate('gtv_latest_copied', result.items[0].text);
+      }
     } catch (err) {
       console.error('[GoTiengViet] refreshClipboardHistory error:', err);
       AppStorage.set(KEY_CLIPBOARD_ITEMS, this.clipboardItems);
@@ -840,9 +1148,16 @@ export default class GoTiengVietService extends InputMethodExtensionAbility {
   onDestroy(): void {
     console.info('[GoTiengViet] Service onDestroy');
     this.stopClipboardPolling();
+    this.unsubscribeSettingsChanged();
+    try {
+      display.off('change');
+    } catch (e) {
+      console.error('[GoTiengViet] Unregister display.off error: ' + e);
+    }
     KeyboardBridge.clearHandlers();
 
     const ima = inputMethodEngine.getInputMethodAbility();
+
     if (this.panel) {
       ima.destroyPanel(this.panel).catch((err: Error) => {
         console.error('[GoTiengViet] destroyPanel error:', err);

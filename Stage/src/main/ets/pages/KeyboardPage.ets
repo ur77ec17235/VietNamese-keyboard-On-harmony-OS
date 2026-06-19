@@ -16,16 +16,34 @@ import { InputMode } from '../telex/core/InputEngineBase';
 import { InputLanguageOption, INSTALLED_INPUT_LANGUAGES } from '../telex/core/InputLanguageCatalog';
 import { KeyboardBridge } from '../telex/service/KeyboardBridge';
 import { KEY_INPUT_MODE, KEY_COMPOSING, KEY_CANDIDATES,
-  KEY_IS_SHIFTED, KEY_SHOW_CLIPBOARD, KEY_CLIPBOARD_ITEMS, KEY_CLIPBOARD_STATUS } from '../telex/service/GoTiengVietService';
+  KEY_IS_SHIFTED, KEY_SHOW_CLIPBOARD, KEY_CLIPBOARD_ITEMS, KEY_CLIPBOARD_STATUS,
+  KEY_CURSOR_LEFT, KEY_CURSOR_RIGHT } from '../telex/service/GoTiengVietService';
 import { ClipboardItem } from '../telex/service/ClipboardManager';
 import { PreferencesManager } from '../telex/core/PreferencesManager';
 import preferences from '@ohos.data.preferences';
 import display from '@ohos.display';
 import { DEFAULT_KEYBOARD_BG_COLOR, DEFAULT_KEYBOARD_DARK_MODE, DEFAULT_KEYBOARD_KEY_COLOR, DEFAULT_KEYBOARD_KEY_OPACITY,
   DEFAULT_KEYBOARD_OPACITY, getVirtualKeyboardKeyBg, getVirtualKeyboardTheme, GTV_BG_COLOR_KEY,
-  GTV_BG_OPACITY_KEY, GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_KEY_OPACITY_KEY, KEYBOARD_COLOR_PALETTE,
+  GTV_BG_OPACITY_KEY, GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_TEXT_COLOR_KEY, DEFAULT_KEYBOARD_TEXT_COLOR, GTV_KEY_OPACITY_KEY, KEYBOARD_COLOR_PALETTE,
   GTV_SHOW_NUMBER_ROW_KEY, KEYBOARD_OPACITY_OPTIONS, normalizeKeyboardOpacity, VirtualKeyboardTheme } from '../telex/ui/KeyboardTheme';
-
+import {
+  GTV_KEY_SIZE_LABEL_KEY,
+  GTV_SOUND_ENABLED_KEY,
+  GTV_VIBRATION_ENABLED_KEY,
+  GTV_CLIPBOARD_ENABLED_KEY,
+  GTV_SUGGESTION_ENABLED_KEY,
+  GTV_KEYBOARD_HEIGHT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY,
+  DEFAULT_KEY_SIZE_LABEL,
+  DEFAULT_SOUND_ENABLED,
+  DEFAULT_VIBRATION_ENABLED,
+  DEFAULT_CLIPBOARD_ENABLED,
+  DEFAULT_SUGGESTION_ENABLED,
+  DEFAULT_KEYBOARD_HEIGHT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP
+} from '../telex/core/KeyboardSettingsKeys';
 // ─────────────────────────────────────────────────────────
 //  TRUNG TÂM CẤU HÌNH  ← SỬA ĐÂY ĐỂ THAY ĐỔI KÍCH THƯỚC
 // ─────────────────────────────────────────────────────────
@@ -328,34 +346,39 @@ const STICKER_ITEMS: StickerItem[] = [
 @Entry
 @Component
 struct KeyboardPage {
-  @StorageLink(KEY_INPUT_MODE)      inputMode: InputMode       = InputMode.TELEX;
-  @StorageLink(KEY_COMPOSING)       composingText: string      = '';
-  @StorageLink(KEY_CANDIDATES)      candidates: string[]       = [];
-  @StorageLink(KEY_IS_SHIFTED)      isShifted: boolean         = false;
-  @StorageLink(KEY_SHOW_CLIPBOARD)  showClipboard: boolean     = false;
-  @StorageLink(KEY_CLIPBOARD_ITEMS) clipboardItems: ClipboardItem[] = [];
-  @StorageLink(KEY_CLIPBOARD_STATUS) clipboardStatus: string   = '';
-  @StorageLink(KEY_IS_LANDSCAPE)    isLandscape: boolean       = false;
-  @StorageLink(KEY_PANEL_HEIGHT_VP) panelVp: number            = 280;
+  @StorageLink(KEY_INPUT_MODE)        inputMode: InputMode       = InputMode.TELEX;
+  @StorageLink(KEY_COMPOSING)         composingText: string      = '';
+  @StorageLink('gtv_latest_copied')   latestCopied: string       = '';
+  @StorageLink(KEY_CANDIDATES)        candidates: string[]       = [];
+  @StorageLink(KEY_IS_SHIFTED)        isShifted: boolean         = false;
+  @StorageLink(KEY_SHOW_CLIPBOARD)    showClipboard: boolean     = false;
+  @StorageLink(KEY_CLIPBOARD_ITEMS)   clipboardItems: ClipboardItem[] = [];
+  @StorageLink(KEY_CLIPBOARD_STATUS)  clipboardStatus: string   = '';
+  @StorageLink(KEY_IS_LANDSCAPE)      isLandscape: boolean       = false;
+  @StorageLink(KEY_PANEL_HEIGHT_VP)   panelVp: number            = 280;
+  @StorageProp('gtv_inputPattern')    inputPattern: number       = 0;
+  @StorageProp('gtv_enterKeyType')    enterKeyType: number       = 0;
 
-  @State layout: KeyLayout = KeyLayout.LETTERS;
-  @State pressedKey: string = '';
-  @State showEmoji: boolean = false;
-  @State emojiCat: number = 0;
+  @State layout:                      KeyLayout = KeyLayout.LETTERS;
+  @State pressedKey:                  string = '';
+  @State showEmoji:                   boolean = false;
+  @State emojiCat:                   number = 0;
   @State layoutBeforeEmoji: KeyLayout = KeyLayout.LETTERS;
   @State activePanel: TaskPanel = TaskPanel.NONE;
   @State stickerGrid: boolean = true;
+
   @State translateInput: string = '';
   @State translateOutput: string = 'Đang phát triển: dịch tự động sẽ hiển thị tại đây.';
   @State translateSourceLangIndex: number = 0;
   @State translateTargetLangIndex: number = 2;
   @State translateEnabled: boolean = false;
-  @State clipboardEnabled: boolean = true;
-  @State vibrationEnabled: boolean = true;
-  @State keySoundEnabled: boolean = false;
-  @State keySizeLabel: string = 'Vừa';
   @State inputLanguageIndex: number = 0;
-  @State themeColor: string = '#1E1E1E';
+
+  @StorageLink(GTV_CLIPBOARD_ENABLED_KEY) clipboardEnabled: boolean = DEFAULT_CLIPBOARD_ENABLED;
+  @StorageLink(GTV_VIBRATION_ENABLED_KEY) vibrationEnabled: boolean = DEFAULT_VIBRATION_ENABLED;
+  @StorageLink(GTV_SOUND_ENABLED_KEY) keySoundEnabled: boolean = DEFAULT_SOUND_ENABLED;
+  @StorageLink(GTV_SUGGESTION_ENABLED_KEY) suggestionEnabled: boolean = DEFAULT_SUGGESTION_ENABLED;
+
   @State devNotice: string = '';
   @State showDevelopingPopup: boolean = false;
   @State developingFeature: string = '';
@@ -378,25 +401,59 @@ struct KeyboardPage {
   private readonly backspaceRepeatMs: number = 45;
   private readonly backspaceWordDelayMs: number = 3000;
   private readonly backspaceWordRepeatMs: number = 150;
+  private spacePanLastStep: number = 0;
+  private spaceIsPanning: boolean = false;
+  private resizeStartHeight: number = 280;
+  private readonly spaceCursorStepVp: number = 18;
+  private readonly spaceCursorMaxMovePerUpdate: number = 3;
 
   // ── Theme ──
   @StorageLink(GTV_DARK_MODE_KEY) darkMode: boolean = DEFAULT_KEYBOARD_DARK_MODE;
   @StorageLink(GTV_BG_COLOR_KEY) bgBase: string = DEFAULT_KEYBOARD_BG_COLOR;
   @StorageLink(GTV_KEY_COLOR_KEY) keyBase: string = DEFAULT_KEYBOARD_KEY_COLOR;
+  @StorageLink(GTV_TEXT_COLOR_KEY) textBase: string = DEFAULT_KEYBOARD_TEXT_COLOR;
   @StorageLink(GTV_BG_OPACITY_KEY) bgOpacity: number = DEFAULT_KEYBOARD_OPACITY;
   @StorageLink(GTV_KEY_OPACITY_KEY) keyOpacity: number = DEFAULT_KEYBOARD_KEY_OPACITY;
   @StorageLink(GTV_SHOW_NUMBER_ROW_KEY) showNumberRow: boolean = true;
 
   private kbTheme(): VirtualKeyboardTheme {
-    return getVirtualKeyboardTheme(this.bgBase, this.keyBase, this.darkMode);
+    return getVirtualKeyboardTheme(this.bgBase, this.keyBase, this.darkMode, this.textBase);
   }
 
-  get bg(): string { return this.kbTheme().bgColor; }
+  // =========================================================
+  // BẠN CÓ THỂ ĐỔI MÀU Ở CÁC BIẾN DƯỚI ĐÂY
+  // =========================================================
+
+  get bg(): string { return this.kbTheme().bgColor; } //#60A5FA
   get keyN(): string { return this.kbTheme().keyBg; }
-  get keyS(): string { return this.kbTheme().specialBg; }
+
+  // 3. Nền nút Enter, ABC, 123, Shift, Delete
+  get keyS(): string { return this.keyN; }
+  
   get keyAcc(): string { return this.kbTheme().pressedBg; }
-  get txt(): string { return this.kbTheme().textColor; }
-  get mutedTxt(): string { return this.kbTheme().mutedTextColor; }
+
+  // 5. Màu chữ (Text colors)
+  get txt(): string { return this.kbTheme().textColor; } // Chữ bình thường
+  
+  // Getter for text color
+  get mutedTxt(): string { return '#f3f6f4'; } // Chữ nhạt
+  get panelTxt(): string { return this.darkMode ? '#F3F6F4' : '#111111'; } // Chữ trong bảng (Cài đặt nhanh, Ngôn ngữ...)
+  get panelMutedTxt(): string { return this.darkMode ? '#A0A0A0' : '#666666'; } // Chữ nhạt trong bảng
+
+  // Các nền Panel (Bảng)
+  get panelBg(): string { return this.darkMode ? '#444444' : '#F3F6F4'; }
+  get panelHeaderBg(): string { return this.darkMode ? '#2D2D2D' : '#E2E8F0'; }
+
+  // 4. Nền các ô chức năng trong Cài đặt nhanh (và các menu khác)
+  get panelItemBg(): string { return this.keyN; }
+  
+  get panelItemSelectedBg(): string { return this.keyAcc; }
+  get panelAccentTxt(): string { return this.darkMode ? '#60A5FA' : '#2563EB'; }
+
+  // 4. Màu chữ/icon của nút X (Đóng) trong bảng Cài đặt nhanh
+  get panelCloseBtnColor(): string { return '#f3f6f4'; }
+
+  // =========================================================
 
   // Cấu hình hiện tại (thay đổi theo hướng)
   private get c(): KBCfg | KBCfgLandscape {
@@ -404,12 +461,6 @@ struct KeyboardPage {
   }
 
   private getKeyScale(): number {
-    if (this.keySizeLabel === 'Nhỏ') {
-      return 0.88;
-    }
-    if (this.keySizeLabel === 'Lớn') {
-      return 1.14;
-    }
     return 1.0;
   }
 
@@ -418,12 +469,6 @@ struct KeyboardPage {
   }
 
   private getKeyHeight(landscape: boolean): string {
-    if (this.keySizeLabel === 'Nhỏ') {
-      return landscape ? '75.6%' : '77.4%';
-    }
-    if (this.keySizeLabel === 'Lớn') {
-      return landscape ? '88.2%' : '89.1%';
-    }
     return landscape ? CFG_L.kH : CFG_P.kH;
   }
 
@@ -455,6 +500,67 @@ struct KeyboardPage {
     return Math.round((landscape ? 18 : 20) * this.getKeyScale());
   }
 
+  private getHeightSettingKey(landscape: boolean): string {
+    return landscape ? GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY : GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY;
+  }
+
+  private getHeightSettingDefault(landscape: boolean): number {
+    return landscape ? DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP : DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP;
+  }
+
+  private async loadKeyboardHeightForCurrentOrientation(): Promise<number> {
+    const fallbackHeight = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_VP_KEY, DEFAULT_KEYBOARD_HEIGHT_VP) as number;
+    const savedHeight = await PreferencesManager.get(this.getHeightSettingKey(this.isLandscape), fallbackHeight) as number;
+    const parsedHeight = typeof savedHeight === 'number' ? savedHeight : fallbackHeight;
+    return Math.round(Math.min(420, Math.max(180, Number(parsedHeight) || this.getHeightSettingDefault(this.isLandscape))));
+  }
+
+  private syncPanelHeight(height: number): void {
+    const nextHeight = Math.round(Math.min(420, Math.max(180, height)));
+    this.panelVp = nextHeight;
+    AppStorage.set(KEY_PANEL_HEIGHT_VP, nextHeight);
+  }
+
+  private saveKeyboardHeightSetting(height: number): void {
+    const nextHeight = Math.round(Math.min(420, Math.max(180, height)));
+    this.syncPanelHeight(nextHeight);
+    const key = this.getHeightSettingKey(this.isLandscape);
+
+    // Người dùng kéo resize ra tổng chiều cao. Cần quy ngược lại "chiều cao cơ bản" (5 hàng) để lưu.
+    const baseHeight = this.showNumberRow ? Math.round((nextHeight * 5) / 6) : nextHeight;
+
+    AppStorage.setOrCreate(key, baseHeight);
+    PreferencesManager.set(key, baseHeight).catch((err: Error) => {
+      console.error('[KeyboardPage] save portrait/landscape height failed: ' + err.message);
+    });
+    // Removed write to GTV_KEYBOARD_HEIGHT_VP_KEY to prevent overlap
+    KeyboardBridge.sendThemeChanged();
+  }
+
+  // --- Context Helpers ---
+  isPassword(): boolean {
+    return [7, 8, 9, 11].includes(this.inputPattern);
+  }
+
+  isNumberMode(): boolean {
+    return [2, 3, 8, 12].includes(this.inputPattern);
+  }
+
+  isEmail(): boolean {
+    return this.inputPattern === 5;
+  }
+
+  getEnterKeyLabel(type: number): string {
+    switch (type) {
+      case 2: return 'Đi'; // GO
+      case 3: return '🔍'; // SEARCH
+      case 4: return '➤'; // SEND
+      case 5: return '⏭'; // NEXT
+      case 6: return 'Xong'; // DONE
+      default: return '↵'; // Default
+    }
+  }
+
   aboutToAppear(): void {
     try {
       const d = display.getDefaultDisplaySync();
@@ -480,6 +586,7 @@ struct KeyboardPage {
       const keyColor = await PreferencesManager.get(GTV_KEY_COLOR_KEY, DEFAULT_KEYBOARD_KEY_COLOR) as string;
       const darkMode = await PreferencesManager.get(GTV_DARK_MODE_KEY, DEFAULT_KEYBOARD_DARK_MODE) as boolean;
       const showNumberRow = await PreferencesManager.get(GTV_SHOW_NUMBER_ROW_KEY, true) as boolean;
+      const currentPanelHeight = await this.loadKeyboardHeightForCurrentOrientation();
 
       AppStorage.setOrCreate(GTV_BG_OPACITY_KEY, bgOpacity);
       AppStorage.setOrCreate(GTV_KEY_OPACITY_KEY, keyOpacity);
@@ -492,11 +599,19 @@ struct KeyboardPage {
     }
   }
 
-  private saveThemeSetting(key: string, value: preferences.ValueType): void {
+  private saveKeyboardSetting(key: string, value: preferences.ValueType): void {
     AppStorage.setOrCreate(key, value);
+
     PreferencesManager.set(key, value).catch((err: Error) => {
-      console.error('[GoTiengViet] save theme setting failed:', err.message);
+      console.error('[KeyboardPage] save setting failed: ' + err.message);
     });
+
+    // Dùng lại signal themeChanged như một signal reload settings chung.
+    KeyboardBridge.sendThemeChanged();
+  }
+
+  private saveThemeSetting(key: string, value: preferences.ValueType): void {
+    this.saveKeyboardSetting(key, value);
   }
 
   // ── Helpers ──
@@ -533,7 +648,7 @@ struct KeyboardPage {
   }
 
   bgK(k: string, keyBase: string): string {
-    return getVirtualKeyboardKeyBg(k, getVirtualKeyboardTheme(this.bgBase, keyBase, this.darkMode),
+    return getVirtualKeyboardKeyBg(k, getVirtualKeyboardTheme(this.bgBase, keyBase, this.darkMode, this.textBase),
       this.pressedKey, this.isShifted, this.isSpecial(k));
   }
 
@@ -645,6 +760,47 @@ struct KeyboardPage {
     this.closeAccentPopup();
     this.accentOutsideKeyPending = k;
     return true;
+  }
+
+  //Swipe Space button
+  private resetSpacePan(isEnding: boolean = false): void {
+    this.spacePanLastStep = 0;
+    if (isEnding) {
+      setTimeout(() => {
+        this.spaceIsPanning = false;
+      }, 50);
+    }
+  }
+
+  private handleSpacePanUpdate(event: GestureEvent): void {
+    const offsetX = event.offsetX;
+
+    const currentStep = Math.trunc(offsetX / this.spaceCursorStepVp);
+    let deltaStep = currentStep - this.spacePanLastStep;
+
+    if (deltaStep === 0) {
+      return;
+    }
+
+    if (deltaStep > this.spaceCursorMaxMovePerUpdate) {
+      deltaStep = this.spaceCursorMaxMovePerUpdate;
+    }
+
+    if (deltaStep < -this.spaceCursorMaxMovePerUpdate) {
+      deltaStep = -this.spaceCursorMaxMovePerUpdate;
+    }
+
+    if (deltaStep > 0) {
+      for (let i = 0; i < deltaStep; i++) {
+        KeyboardBridge.sendKey(KEY_CURSOR_RIGHT);
+      }
+    } else {
+      for (let i = 0; i < Math.abs(deltaStep); i++) {
+        KeyboardBridge.sendKey(KEY_CURSOR_LEFT);
+      }
+    }
+
+    this.spacePanLastStep = currentStep;
   }
 
   private consumeAccentOutsideActionDown(): boolean {
@@ -846,8 +1002,35 @@ struct KeyboardPage {
   //  BUILD CHÍNH
   // ═══════════════════════════════════════════
   build() {
-    Stack({ alignContent: Alignment.TopStart }) {
+    Stack({ alignContent: Alignment.Bottom }) {
       Column() {
+        // Thanh kéo (Drag handle) để chỉnh chiều cao
+        Row() {
+          Row()
+            .width(40)
+            .height(4)
+            .backgroundColor('#FFFFFF')
+            .borderRadius(2)
+        }
+        .width('100%')
+        .height(16)
+        .justifyContent(FlexAlign.Center)
+        .alignItems(VerticalAlign.Top)
+        .padding({ top: 4 })
+        .gesture(
+          PanGesture({ direction: PanDirection.Vertical })
+            .onActionStart(() => {
+              this.resizeStartHeight = this.panelVp;
+            })
+            .onActionUpdate((event: GestureEvent) => {
+              let nextHeight = this.resizeStartHeight - Math.round(event.offsetY);
+              nextHeight = Math.round(nextHeight / 2) * 2; // Lệch nhau mỗi 2 đơn vị
+              if (nextHeight < 180) nextHeight = 180;
+              if (nextHeight > 420) nextHeight = 420;
+              this.saveKeyboardHeightSetting(nextHeight);
+            })
+        )
+
         if (this.showEmoji) {
           this.buildEmojiPanel()
         } else if (this.activePanel === TaskPanel.MODE) {
@@ -865,21 +1048,21 @@ struct KeyboardPage {
         } else if (this.activePanel === TaskPanel.THEME) {
           this.buildThemePanel()
         } else if (this.isLandscape) {
-          this.buildKeyboard(true)
+          this.buildKeyboard(true, this.enterKeyType)
         } else {
-          this.buildKeyboard(false)
+          this.buildKeyboard(false, this.enterKeyType)
         }
       }
-      .width(this.keySizeLabel ? '100%' : '100%')
+      .width('100%')
       .height(this.panelVp)
-      .backgroundColor(this.bgBase)
+      .backgroundColor(this.bg)
       .opacity(normalizeKeyboardOpacity(this.bgOpacity))
 
       if (this.accentPopupVisible) {
         Column() {}
           .width('100%')
           .height(this.panelVp)
-          .backgroundColor('#00000000')
+          .backgroundColor('##444444')
           .onClick(() => {
             this.closeAccentPopup();
           })
@@ -888,6 +1071,39 @@ struct KeyboardPage {
       if (this.showDevelopingPopup) {
         this.buildDevelopingPopup()
       }
+
+      // Thanh kéo (Drag handle) để chỉnh chiều cao
+      // Row() {
+      //   Row()
+      //     .width(40)
+      //     .height(4)
+      //     .backgroundColor('#FFFFFF')
+      //     .borderRadius(2)
+      // }
+      // .width('100%')
+      // .height(16)
+      // .justifyContent(FlexAlign.Center)
+      // .alignItems(VerticalAlign.Top)
+      // .padding({ top: 4 })
+      // .gesture(
+      //   PanGesture({ direction: PanDirection.Vertical })
+      //     .onActionStart(() => {
+      //       this.resizeStartHeight = this.panelVp;
+      //     })
+      //     .onActionUpdate((event: GestureEvent) => {
+      //       let nextHeight = this.resizeStartHeight - Math.round(event.offsetY);
+      //       nextHeight = Math.round(nextHeight / 5) * 5; // Lệch nhau mỗi 5 đơn vị
+      //       if (nextHeight < 180) nextHeight = 180;
+      //       if (nextHeight > 420) nextHeight = 420;
+      //       if (this.panelVp !== nextHeight) {
+      //         KeyboardBridge.sendLiveResize(nextHeight);
+      //         this.panelVp = nextHeight;
+      //       }
+      //     })
+      //     .onActionEnd(() => {
+      //       this.saveKeyboardHeightSetting(this.panelVp);
+      //     })
+      // )
     }
     .width('100%')
     .height(this.panelVp)
@@ -898,17 +1114,22 @@ struct KeyboardPage {
   //  BÀN PHÍM CHÍNH (dọc VÀ ngang dùng chung hàm, chỉ khác data rows)
   // ═══════════════════════════════════════════
   @Builder
-  buildKeyboard(landscape: boolean) {
+  buildKeyboard(landscape: boolean, enterType: number) {
     Column() {
       // ── Thanh gợi ý ──
-      this.buildBar(landscape)
+      if (!this.isNumberMode()) {
+        this.buildBar(landscape)
+      }
 
-      // ── Row 0 ──
+      if (this.isNumberMode()) {
+        this.buildNumpad(landscape, enterType)
+      } else {
+        // ── Row 0 ──
       if (landscape ? this.getLR0().length > 0 : this.getPR0().length > 0) {
         Row() {
           ForEach(landscape ? this.getLR0() : this.getPR0(), (k: string) => {
             this.buildKey(k, landscape)
-          })
+          }, (k: string) => k + `${this.textBase}_${this.keyBase}_${this.bgBase}_${this.darkMode}_${this.keyOpacity}_${this.bgOpacity}`)
         }
         .width('100%').layoutWeight(1)
         .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
@@ -919,7 +1140,7 @@ struct KeyboardPage {
       Row() {
         ForEach(landscape ? this.getLR1() : this.getPR1(), (k: string) => {
           this.buildKey(k, landscape)
-        })
+        }, (k: string) => k + `${this.textBase}_${this.keyBase}_${this.bgBase}_${this.darkMode}_${this.keyOpacity}_${this.bgOpacity}`)
       }
       .width('100%').layoutWeight(1)
       .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
@@ -929,7 +1150,7 @@ struct KeyboardPage {
       Row() {
         ForEach(landscape ? this.getLR2() : this.getPR2(), (k: string) => {
           this.buildKey(k, landscape)
-        })
+        }, (k: string) => k + `${this.textBase}_${this.keyBase}_${this.bgBase}_${this.darkMode}_${this.keyOpacity}_${this.bgOpacity}`)
       }
       .width(this.getRow2Width()).layoutWeight(1)
       .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
@@ -942,7 +1163,7 @@ struct KeyboardPage {
         // Phím giữa
         ForEach(landscape ? this.getLR3Inner() : this.getPR3Inner(), (k: string) => {
           this.buildKey(k, landscape)
-        })
+        }, (k: string) => k + `${this.textBase}_${this.keyBase}_${this.bgBase}_${this.darkMode}_${this.keyOpacity}_${this.bgOpacity}`)
         // BACKSPACE (luôn ở đây)
         this.buildWKey('BACKSPACE', landscape ? CFG_L.wBS : CFG_P.wBS, landscape)
       }
@@ -951,12 +1172,45 @@ struct KeyboardPage {
       .padding({ top: this.getKeyMarginV(landscape), bottom: this.getKeyMarginV(landscape) })
 
       // ── Row 4: Hàng action (123/ABC, 😊, ,, SPACE, ., ENTER) ──
-      this.buildActionRow(landscape)
+      this.buildActionRow(landscape, enterType)
+      } // End else
     }
     .width('100%').layoutWeight(1)
     .padding({ left: this.getKeyMarginH(landscape),
                right: this.getKeyMarginH(landscape),
                top: 2, bottom: 2 })
+  }
+
+  // ── NUMPAD LAYOUT ──
+  @Builder
+  buildNumpadRow(keys: string[], landscape: boolean, enterType: number) {
+    Row() {
+      ForEach(keys, (k: string) => {
+        if (k === 'BACKSPACE') {
+          this.buildWKey('BACKSPACE', 1, landscape)
+        } else if (k === 'ENTER') {
+          this.buildActKey(this.getEnterKeyLabel(enterType), () => { KeyboardBridge.sendEnter(); }, 1, landscape)
+        } else if (k === 'SPACE') {
+          this.buildSpaceKey(1, landscape)
+        } else {
+          this.buildKey(k, landscape)
+        }
+      }, (k: string) => k)
+    }
+    .width('100%').layoutWeight(1)
+    .justifyContent(FlexAlign.Center).alignItems(VerticalAlign.Center)
+    .padding({ top: this.getKeyMarginV(landscape), bottom: this.getKeyMarginV(landscape) })
+  }
+
+  @Builder
+  buildNumpad(landscape: boolean, enterType: number) {
+    Column() {
+      this.buildNumpadRow(['1', '2', '3', '-'], landscape, enterType)
+      this.buildNumpadRow(['4', '5', '6', 'SPACE'], landscape, enterType)
+      this.buildNumpadRow(['7', '8', '9', 'BACKSPACE'], landscape, enterType)
+      this.buildNumpadRow(['*', '0', '#', 'ENTER'], landscape, enterType)
+    }
+    .width('100%').layoutWeight(1)
   }
 
   // ── Dữ liệu hàng theo layout + hướng ──
@@ -1104,7 +1358,7 @@ struct KeyboardPage {
   openPanel(panel: TaskPanel): void {
     if (panel === TaskPanel.STICKER ||
         panel === TaskPanel.TRANSLATE ||
-        panel === TaskPanel.SETTINGS ||
+        // panel === TaskPanel.SETTINGS ||
         panel === TaskPanel.THEME ||
         panel === TaskPanel.LANGUAGE) {
       this.showDeveloping('Chức năng này');
@@ -1223,28 +1477,40 @@ struct KeyboardPage {
 
   handleSetting(action: string): void {
     switch (action) {
-      case 'size':
-        this.keySizeLabel = this.keySizeLabel === 'Vừa' ? 'Lớn' : (this.keySizeLabel === 'Lớn' ? 'Nhỏ' : 'Vừa');
-        this.closePanel();
+      case 'window_size': {
+        const presets = [180, 220, 260, 300, 340, 380, 420];
+        let nextHeight = presets.find(h => h > this.panelVp);
+        if (nextHeight === undefined) nextHeight = presets[0];
+        this.saveKeyboardHeightSetting(nextHeight);
         break;
+      }
       case 'theme':
         this.openPanel(TaskPanel.THEME);
         break;
-      case 'number_row':
-        this.showNumberRow = !this.showNumberRow;
+      case 'number_row': {
+        const next = !this.showNumberRow;
+        this.showNumberRow = next;
+        this.saveKeyboardSetting(GTV_SHOW_NUMBER_ROW_KEY, next);
         break;
+      }
       case 'language':
         this.openPanel(TaskPanel.LANGUAGE);
         break;
       case 'mode':
         this.openPanel(TaskPanel.MODE);
         break;
-      case 'vibration':
-        this.vibrationEnabled = !this.vibrationEnabled;
+      case 'vibration': {
+        const next = !this.vibrationEnabled;
+        this.vibrationEnabled = next;
+        this.saveKeyboardSetting(GTV_VIBRATION_ENABLED_KEY, next);
         break;
-      case 'sound':
-        this.keySoundEnabled = !this.keySoundEnabled;
+      }
+      case 'sound': {
+        const next = !this.keySoundEnabled;
+        this.keySoundEnabled = next;
+        this.saveKeyboardSetting(GTV_SOUND_ENABLED_KEY, next);
         break;
+      }
       case 'app':
         KeyboardBridge.sendOpenApp();
         this.closePanel();
@@ -1256,7 +1522,7 @@ struct KeyboardPage {
 
   getSettingsItems(): SettingsItem[] {
     return [
-      new SettingsItem('↕', 'Size phím', this.keySizeLabel, 'size'),
+      new SettingsItem('🪟', 'Size cửa sổ', `${this.panelVp}vp`, 'window_size'),
       new SettingsItem('🎨', 'Giao diện', this.darkMode ? 'Tối' : 'Sáng', 'theme'),
       new SettingsItem('🔢', 'Hàng số', this.showNumberRow ? 'Bật' : 'Tắt', 'number_row'),
       new SettingsItem('文', 'Ngôn ngữ', this.getCurrentInputLanguage().title, 'language'),
@@ -1272,7 +1538,7 @@ struct KeyboardPage {
   @Builder
   buildBar(landscape: boolean) {
     Row() {
-      if (this.composingText.length > 0) {
+      if (!this.isPassword() && this.suggestionEnabled && this.composingText.length > 0) {
         Text(this.composingText)
           .fontSize(landscape ? 12 : 14).fontColor(this.kbTheme().accentColor)
           .padding({ left: 8, right: 6 }).maxLines(1)
@@ -1286,17 +1552,37 @@ struct KeyboardPage {
               });
             })
         })
+      } else if (!this.isPassword() && this.latestCopied && this.latestCopied.length > 0) {
+        Row() {
+          Text('📋 ' + this.latestCopied.replace(/\n/g, ' ').substring(0, 20) + (this.latestCopied.length > 20 ? '...' : ''))
+            .fontSize(landscape ? 11 : 13)
+            .fontColor(this.kbTheme().accentColor)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+        .backgroundColor(this.kbTheme().keyBg)
+        .borderRadius(12)
+        .margin({ left: 8 })
+        .onClick(() => {
+          this.runKeyboardAction(() => {
+            KeyboardBridge.sendPasteText(this.latestCopied);
+            this.latestCopied = '';
+          });
+        })
       }
       Blank()
       this.buildTaskButton(this.getInputModeLabel() + '⌄', () => { this.openPanel(TaskPanel.MODE); }, landscape)
       this.buildTaskButton('Ẩn', () => { KeyboardBridge.sendHide(); }, landscape)
-      this.buildTaskButton('📋', () => { this.openClipboardPanel(); }, landscape)
-      this.buildTaskButton('☆', () => { this.openPanel(TaskPanel.STICKER); }, landscape)
-      this.buildTaskButton('⇄', () => { this.openPanel(TaskPanel.TRANSLATE); }, landscape)
+      if (this.clipboardEnabled) {
+        this.buildTaskButton('📋', () => { this.openClipboardPanel(); }, landscape)
+      }
+      // this.buildTaskButton('☆', () => { this.openPanel(TaskPanel.STICKER); }, landscape)
+      // this.buildTaskButton('⇄', () => { this.openPanel(TaskPanel.TRANSLATE); }, landscape)
       this.buildTaskButton('⚙', () => { this.openPanel(TaskPanel.SETTINGS); }, landscape)
     }
     .width('100%')
-    .height(landscape ? CFG_L.barH : CFG_P.barH)
+    .layoutWeight(1)
     .backgroundColor(this.kbTheme().barBg)
     .alignItems(VerticalAlign.Center)
     .margin({ bottom: 2 })
@@ -1325,7 +1611,7 @@ struct KeyboardPage {
 
   // ── Hàng Action (Row 4) ──
   @Builder
-  buildActionRow(landscape: boolean) {
+  buildActionRow(landscape: boolean, enterType: number) {
     Row() {
       // Nút chuyển layout (123 ↔ ABC)
       this.buildActKey(
@@ -1341,16 +1627,18 @@ struct KeyboardPage {
         this.showEmoji = !this.showEmoji;
         this.showClipboard = false;
       }, landscape ? CFG_L.wEmoji : CFG_P.wEmoji, landscape)
-      // Dấu phẩy
-      this.buildActKey(',', () => { KeyboardBridge.sendKey(','); },
+      // Dấu phẩy hoặc @
+      this.buildActKey(this.isEmail() ? '@' : ',', () => { KeyboardBridge.sendKey(this.isEmail() ? '@' : ','); },
         landscape ? CFG_L.wComma : CFG_P.wComma, landscape)
       // Phím cách
       this.buildSpaceKey(landscape ? CFG_L.wSpace : CFG_P.wSpace, landscape)
-      // Dấu chấm
-      this.buildActKey('.', () => { KeyboardBridge.sendKey('.'); },
-        landscape ? CFG_L.wDot : CFG_P.wDot, landscape)
+      // Dấu chấm hoặc .com
+      this.buildActKey(this.isEmail() ? '.com' : '.', () => { 
+        if (this.isEmail()) KeyboardBridge.sendPasteText('.com'); 
+        else KeyboardBridge.sendKey('.'); 
+      }, landscape ? CFG_L.wDot : CFG_P.wDot, landscape)
       // Enter (luôn ở đây)
-      this.buildActKey('↵', () => { KeyboardBridge.sendEnter(); },
+      this.buildActKey(this.getEnterKeyLabel(enterType), () => { KeyboardBridge.sendEnter(); },
         landscape ? CFG_L.wEnter : CFG_P.wEnter, landscape)
     }
     .width('100%').layoutWeight(1)
@@ -1520,7 +1808,7 @@ struct KeyboardPage {
     .layoutWeight(w)
     .height(this.getKeyHeight(landscape))
     .margin({ left: this.getKeyMarginH(landscape), right: this.getKeyMarginH(landscape) })
-    .backgroundColor(this.keyS)
+    .backgroundColor(this.darkMode ? '#444444' : '#F3F6F4')
     .borderRadius(this.getKeyRadius(landscape))
     .opacity(normalizeKeyboardOpacity(this.keyOpacity))
     .onClick(() => {
@@ -1548,14 +1836,33 @@ struct KeyboardPage {
     .borderRadius(this.getSpaceRadius(landscape))
     .opacity(normalizeKeyboardOpacity(this.keyOpacity))
     .onTouch((event: TouchEvent) => {
-      if (event.type === TouchType.Down) {
+      // if (event.type === TouchType.Down) {
         if (this.accentPopupVisible) {
           this.closeAccentPopup();
           return;
+        // }
+      } else if (event.type === TouchType.Up) {
+        if (!this.spaceIsPanning) {
+          KeyboardBridge.sendKey(' ');
         }
-        KeyboardBridge.sendKey(' ');
       }
     })
+    .gesture(
+      PanGesture({ fingers: 1, direction: PanDirection.Horizontal, distance: 3 })
+        .onActionStart(() => {
+          this.resetSpacePan();
+          this.spaceIsPanning = true;
+        })
+        .onActionUpdate((event: GestureEvent) => {
+          this.handleSpacePanUpdate(event);
+        })
+        .onActionEnd(() => {
+          this.resetSpacePan(true);
+        })
+        .onActionCancel(() => {
+          this.resetSpacePan(true);
+        })
+    )
   }
 
   // ═══════════════════════════════════════════
@@ -1636,7 +1943,7 @@ struct KeyboardPage {
                  top: this.getKeyMarginV(this.isLandscape),
                  bottom: this.getKeyMarginV(this.isLandscape) })
     }
-    .width('100%').height(this.panelVp).backgroundColor(this.bgBase)
+    .width('100%').height(this.panelVp).backgroundColor(this.bg)
   }
 
   @Builder
@@ -1644,23 +1951,23 @@ struct KeyboardPage {
     Row() {
       Text(title)
         .fontSize(13)
-        .fontColor('#E5E7EB')
+        .fontColor(this.panelTxt)
         .fontWeight(FontWeight.Bold)
         .padding({ left: 12 })
       Blank()
       if (rightLabel.length > 0) {
         Button() {
-          Text(rightLabel).fontSize(12).fontColor('#9CA3AF').maxLines(1)
+          Text(rightLabel).fontSize(12).fontColor(this.mutedTxt).maxLines(1)
         }
         .height(28)
         .padding({ left: 10, right: 10 })
-        .backgroundColor('#1F2937')
+        .backgroundColor(this.kbTheme().taskButtonBg)
         .borderRadius(8)
         .margin({ right: 8 })
         .onClick(rightAction)
       }
       Button() {
-        Text('✕').fontSize(13).fontColor('#9CA3AF')
+        Text('✕').fontSize(13).fontColor(this.panelCloseBtnColor)
       }
       .width(28).height(28)
       .backgroundColor('transparent')
@@ -1669,7 +1976,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(36)
-    .backgroundColor('#0F172A')
+    .backgroundColor(this.panelHeaderBg)
     .alignItems(VerticalAlign.Center)
   }
 
@@ -1712,7 +2019,7 @@ struct KeyboardPage {
           .onClick(() => { this.closeDevelopingPopup(); })
       }
       .width(this.isLandscape ? '42%' : '72%')
-      .backgroundColor('#111827')
+      .backgroundColor(this.panelItemBg)
       .borderRadius(12)
       .padding({ left: 16, right: 16, top: 16, bottom: 14 })
     }
@@ -1734,19 +2041,19 @@ struct KeyboardPage {
           Row() {
             Text(item.label)
               .fontSize(15)
-              .fontColor(this.inputMode === item.value ? '#60A5FA' : '#E5E7EB')
+              .fontColor(this.inputMode === item.value ? this.panelAccentTxt : this.panelTxt)
               .fontWeight(this.inputMode === item.value ? FontWeight.Bold : FontWeight.Regular)
               .layoutWeight(1)
             Text(this.inputMode === item.value ? '✓' : '')
               .fontSize(15)
-              .fontColor('#60A5FA')
+              .fontColor(this.panelAccentTxt)
               .width(24)
               .textAlign(TextAlign.Center)
           }
           .width('100%')
           .height(38)
           .padding({ left: 14, right: 14 })
-          .backgroundColor(this.inputMode === item.value ? '#10243D' : '#111827')
+          .backgroundColor(this.inputMode === item.value ? this.panelItemSelectedBg : this.panelItemBg)
           .borderRadius(8)
           .margin({ top: 4, bottom: 4 })
           .onClick(() => { this.selectMode(item.value); })
@@ -1757,7 +2064,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   @Builder
@@ -1770,25 +2077,25 @@ struct KeyboardPage {
             Column() {
               Text(item.title)
                 .fontSize(15)
-                .fontColor(this.inputLanguageIndex === index ? '#60A5FA' : '#E5E7EB')
+                .fontColor(this.inputLanguageIndex === index ? this.panelAccentTxt : this.panelTxt)
                 .fontWeight(this.inputLanguageIndex === index ? FontWeight.Bold : FontWeight.Regular)
               Text(item.subtitle)
                 .fontSize(11)
-                .fontColor('#9CA3AF')
+                .fontColor(this.mutedTxt)
                 .margin({ top: 3 })
             }
             .alignItems(HorizontalAlign.Start)
             .layoutWeight(1)
             Text(this.inputLanguageIndex === index ? '✓' : '')
               .fontSize(15)
-              .fontColor('#60A5FA')
+              .fontColor(this.panelAccentTxt)
               .width(24)
               .textAlign(TextAlign.Center)
           }
           .width('100%')
           .height(48)
           .padding({ left: 14, right: 14 })
-          .backgroundColor(this.inputLanguageIndex === index ? '#10243D' : '#111827')
+          .backgroundColor(this.inputLanguageIndex === index ? this.panelItemSelectedBg : this.panelItemBg)
           .borderRadius(8)
           .margin({ top: 4, bottom: 4 })
           .onClick(() => { this.selectInputLanguage(index); })
@@ -1799,7 +2106,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   @Builder
@@ -1815,11 +2122,11 @@ struct KeyboardPage {
       Row() {
         Column() {
           Row() {
-            Text('Nhập').fontSize(12).fontColor('#9CA3AF').layoutWeight(1)
+            Text('Nhập').fontSize(12).fontColor(this.mutedTxt).layoutWeight(1)
             Button() {
-              Text(TRANSLATE_LANGS[this.translateSourceLangIndex] + ' ▾').fontSize(11).fontColor('#D1D5DB')
+              Text(TRANSLATE_LANGS[this.translateSourceLangIndex] + ' ▾').fontSize(11).fontColor(this.txt)
             }
-            .height(26).backgroundColor('#1F2937').borderRadius(7)
+            .height(26).backgroundColor(this.kbTheme().taskButtonBg).borderRadius(7)
             .padding({ left: 8, right: 8 })
             .onClick(() => { this.cycleTranslateSourceLang(); })
           }
@@ -1828,8 +2135,8 @@ struct KeyboardPage {
             .width('100%')
             .height(this.isLandscape ? 74 : 96)
             .fontSize(13)
-            .fontColor('#E5E7EB')
-            .backgroundColor('#111827')
+            .fontColor(this.panelTxt)
+            .backgroundColor(this.panelItemBg)
             .borderRadius(8)
             .padding(8)
             .onChange((value: string) => {
@@ -1842,11 +2149,11 @@ struct KeyboardPage {
 
         Column() {
           Row() {
-            Text('Kết quả').fontSize(12).fontColor('#9CA3AF').layoutWeight(1)
+            Text('Kết quả').fontSize(12).fontColor(this.mutedTxt).layoutWeight(1)
             Button() {
-              Text(TRANSLATE_LANGS[this.translateTargetLangIndex] + ' ▾').fontSize(11).fontColor('#D1D5DB')
+              Text(TRANSLATE_LANGS[this.translateTargetLangIndex] + ' ▾').fontSize(11).fontColor(this.txt)
             }
-            .height(26).backgroundColor('#1F2937').borderRadius(7)
+            .height(26).backgroundColor(this.kbTheme().taskButtonBg).borderRadius(7)
             .padding({ left: 8, right: 8 })
             .onClick(() => { this.cycleTranslateTargetLang(); })
           }
@@ -1855,8 +2162,8 @@ struct KeyboardPage {
             .width('100%')
             .height(this.isLandscape ? 74 : 96)
             .fontSize(13)
-            .fontColor('#E5E7EB')
-            .backgroundColor('#111827')
+            .fontColor(this.panelTxt)
+            .backgroundColor(this.panelItemBg)
             .borderRadius(8)
             .padding(8)
             .maxLines(5)
@@ -1875,7 +2182,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   @Builder
@@ -1896,7 +2203,7 @@ struct KeyboardPage {
               .width('100%')
               .height(64)
               .justifyContent(FlexAlign.Center)
-              .backgroundColor('#111827')
+              .backgroundColor(this.panelItemBg)
               .borderRadius(8)
               .onClick(() => { this.insertSticker(item.value); })
             }
@@ -1913,12 +2220,12 @@ struct KeyboardPage {
             ForEach(STICKER_ITEMS, (item: StickerItem) => {
               Row() {
                 Text(item.value).fontSize(24).width(42).textAlign(TextAlign.Center)
-                Text(item.title).fontSize(14).fontColor('#E5E7EB').layoutWeight(1)
-                Text('Chèn').fontSize(12).fontColor('#60A5FA')
+                Text(item.title).fontSize(14).fontColor(this.panelTxt).layoutWeight(1)
+                Text('Chèn').fontSize(12).fontColor(this.panelAccentTxt)
               }
               .height(42)
               .padding({ left: 10, right: 12 })
-              .backgroundColor('#111827')
+              .backgroundColor(this.panelItemBg)
               .borderRadius(8)
               .margin({ left: 10, right: 10, top: 4, bottom: 4 })
               .onClick(() => { this.insertSticker(item.value); })
@@ -1932,7 +2239,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   @Builder
@@ -1943,29 +2250,33 @@ struct KeyboardPage {
       Grid() {
         ForEach(this.getSettingsItems(), (item: SettingsItem) => {
           GridItem() {
-            Column() {
-              Text(item.icon)
-                .fontSize(18)
-                .fontColor('#E5E7EB')
-                .height(24)
-                .textAlign(TextAlign.Center)
-              Text(item.title)
-                .fontSize(11)
-                .fontColor('#D1D5DB')
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-              Text(item.value)
-                .fontSize(10)
-                .fontColor('#9CA3AF')
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Button({ type: ButtonType.Normal }) {
+              Column() {
+                Text(item.icon)
+                  .fontSize(18)
+                  .fontColor(this.panelTxt)
+                  .height(24)
+                  .textAlign(TextAlign.Center)
+                Text(item.title)
+                  .fontSize(11)
+                  .fontColor(this.darkMode ?  '#F3F6F4': '#444444')
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text(item.value)
+                  .fontSize(10)
+                  .fontColor(this.mutedTxt)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .width('100%')
+              .height('100%')
+              .justifyContent(FlexAlign.Center)
+              .padding({ left: 4, right: 4 })
             }
             .width('100%')
             .height(66)
-            .justifyContent(FlexAlign.Center)
-            .backgroundColor('#111827')
+            .backgroundColor(this.darkMode ? '#444444' : '#F3F6F4')
             .borderRadius(8)
-            .padding({ left: 4, right: 4 })
             .onClick(() => { this.handleSetting(item.action); })
           }
         })
@@ -1978,7 +2289,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   @Builder
@@ -1997,36 +2308,49 @@ struct KeyboardPage {
           }.width('100%').padding(16).alignItems(VerticalAlign.Center)
 
           Text('Màu nền').fontSize(14).fontColor(this.mutedTxt).width('100%').padding({ left: 16, bottom: 8 })
-          Scroll() {
-            Row() {
-              ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
-                Circle({ width: 36, height: 36 })
-                  .fill(color)
-                  .margin(6)
-                  .border({ width: this.bgBase === color ? 3 : 0, color: this.kbTheme().selectedBorder })
-                  .onClick(() => {
-                    this.bgBase = color;
-                    this.saveThemeSetting(GTV_BG_COLOR_KEY, color);
-                  })
-              })
-            }.width('100%').padding({ left: 10, right: 10 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Rect({ width: 40, height: 40 })
+                .radius(8)
+                .fill(color)
+                .margin(6)
+                .border({ width: this.bgBase === color ? 3 : 1, color: this.bgBase === color ? this.kbTheme().selectedBorder : '#444' })
+                .onClick(() => {
+                  this.bgBase = color;
+                  this.saveThemeSetting(GTV_BG_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 10, right: 10 })
 
           Text('Màu phím').fontSize(14).fontColor(this.mutedTxt).width('100%').padding({ left: 16, top: 8, bottom: 8 })
-          Scroll() {
-            Row() {
-              ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
-                Circle({ width: 36, height: 36 })
-                  .fill(color)
-                  .margin(6)
-                  .border({ width: this.keyBase === color ? 3 : 0, color: this.kbTheme().selectedBorder })
-                  .onClick(() => {
-                    this.keyBase = color;
-                    this.saveThemeSetting(GTV_KEY_COLOR_KEY, color);
-                  })
-              })
-            }.width('100%').padding({ left: 10, right: 10 })
-          }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Rect({ width: 40, height: 40 })
+                .radius(8)
+                .fill(color)
+                .margin(6)
+                .border({ width: this.keyBase === color ? 3 : 1, color: this.keyBase === color ? this.kbTheme().selectedBorder : '#444' })
+                .onClick(() => {
+                  this.keyBase = color;
+                  this.saveThemeSetting(GTV_KEY_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 10, right: 10 })
+
+          Text('Màu chữ phím').fontSize(14).fontColor(this.mutedTxt).width('100%').padding({ left: 16, top: 16, bottom: 8 })
+          Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Rect({ width: 40, height: 40 })
+                .radius(8)
+                .fill(color)
+                .margin(6)
+                .border({ width: this.textBase === color ? 3 : 1, color: this.textBase === color ? '#4FC3F7' : '#444' })
+                .onClick(() => {
+                  this.textBase = color;
+                  this.saveThemeSetting(GTV_TEXT_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 10, right: 10 })
 
           Text('Độ trong suốt nền').fontSize(14).fontColor(this.mutedTxt).width('100%').padding({ left: 16, top: 16, bottom: 8 })
           Row() {
@@ -2070,7 +2394,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   // ═══════════════════════════════════════════
@@ -2117,16 +2441,20 @@ struct KeyboardPage {
         Grid() {
           ForEach(this.clipboardItems, (item: ClipboardItem) => {
             GridItem() {
-              Row() {
+              Stack({ alignContent: Alignment.TopStart }) {
                 Text(item.text)
                   .fontSize(13)
-                  .fontColor('#CCCCEE')
-                  .maxLines(3)
+                  .fontColor(this.txt)
+                  .maxLines(6)
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
-                  .layoutWeight(1)
-                  .margin({ right: 8 })
-                Text('Dán').fontSize(12).fontColor('#4FC3F7')
+                  .padding(10)
+                  .width('100%')
+                  .height('100%')
               }
+              .width('100%')
+              .aspectRatio(1)
+              .backgroundColor(this.keyBase)
+              .borderRadius(8)
               .onClick(() => { this.pasteClipboardTextItem(item); })
             }
           })
@@ -2140,7 +2468,7 @@ struct KeyboardPage {
     }
     .width('100%')
     .height(this.panelVp)
-    .backgroundColor(this.bgBase)
+    .backgroundColor(this.panelBg)
   }
 
   pasteClipboardTextItem(item: ClipboardItem): void {

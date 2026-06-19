@@ -1,5 +1,6 @@
 export const GTV_BG_COLOR_KEY = 'gtv_bg_color';
 export const GTV_KEY_COLOR_KEY = 'gtv_key_color';
+export const GTV_TEXT_COLOR_KEY = 'gtv_text_color';
 export const GTV_BG_OPACITY_KEY = 'gtv_opacity';
 export const GTV_KEY_OPACITY_KEY = 'gtv_key_opacity';
 export const GTV_DARK_MODE_KEY = 'gtv_dark_mode';
@@ -7,13 +8,14 @@ export const GTV_SHOW_NUMBER_ROW_KEY = 'gtv_show_number_row';
 
 export const DEFAULT_KEYBOARD_BG_COLOR = '#E5E5EA';
 export const DEFAULT_KEYBOARD_KEY_COLOR = '#FFFFFF';
+export const DEFAULT_KEYBOARD_TEXT_COLOR = '';
 export const DEFAULT_KEYBOARD_OPACITY = 100;
 export const DEFAULT_KEYBOARD_KEY_OPACITY = 100;
 export const DEFAULT_KEYBOARD_DARK_MODE = false;
 
 export const KEYBOARD_COLOR_PALETTE: string[] = [
-  '#111111', '#1A1A38', '#2D2D2D', '#1A6A40', '#0B0B20',
-  '#4A90D9', '#E94560', '#E5E5EA', '#FFFFFF'
+  '#FFFFFF', '#F3F6F4', '#E5E5EA', '#E2E8F0', '#BBF7D0', '#FCA5A5',
+  '#444444', '#2D2D2D', '#1F2937', '#1A1A38', '#0B0B20', '#111111'
 ];
 
 export const KEYBOARD_OPACITY_OPTIONS: number[] = [100, 75, 50];
@@ -22,6 +24,7 @@ export interface KeyboardThemePreset {
   label: string;
   bgColor: string;
   keyColor: string;
+  textColor?: string;
   bgOpacity: number;
   keyOpacity: number;
   darkMode: boolean;
@@ -79,20 +82,20 @@ export function getKeyboardTextColor(color: string): string {
     : '#FFFFFF';
 }
 
-export function getVirtualKeyboardTheme(bgColor: string, keyColor: string, darkMode: boolean): VirtualKeyboardTheme {
+export function getVirtualKeyboardTheme(bgColor: string, keyColor: string, darkMode: boolean, textColor: string): VirtualKeyboardTheme {
   return {
     bgColor: bgColor,
     keyBg: keyColor,
-    specialBg: darkMode ? '#3D3D3D' : '#B0B4C0',
-    pressedBg: darkMode ? '#4D4D4D' : '#D1D5DB',
-    shiftedBg: '#4A90D9',
-    accentColor: '#60A5FA',
+    specialBg: darkMode ? '#333333' : '#B0B4C0',
+    pressedBg: darkMode ? '#000000' : '#D1D5DB',
+    shiftedBg: darkMode ? '#333333' : '#B0B4C0',
+    accentColor: darkMode ? '#000000' : '#D1D5DB',
     selectedBorder: '#3B82F6',
     selectedFill: '#3B82F6',
-    textColor: getKeyboardTextColor(keyColor),
-    mutedTextColor: darkMode ? '#9CA3AF' : '#566070',
-    barBg: darkMode ? '#181818' : '#DADDE5',
-    taskButtonBg: darkMode ? '#2D2D2D' : '#C8CDD8'
+    textColor: textColor ? textColor : getKeyboardTextColor(keyColor),
+    mutedTextColor: darkMode ? '#c8ddff' : '#566070',
+    barBg: darkMode ? '#5b5b5b' : '#DADDE5',
+    taskButtonBg: darkMode ? '#566070' : '#C8CDD8'
   };
 }
 

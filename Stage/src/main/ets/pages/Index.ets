@@ -6,17 +6,58 @@
 import common from '@ohos.app.ability.common';
 import Want from '@ohos.app.ability.Want';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
+import commonEventManager from '@ohos.commonEventManager';
 import preferences from '@ohos.data.preferences';
-import { KeyboardBridge } from '../telex/service/KeyboardBridge';
+import display from '@ohos.display';
 import { InputLanguageOption, INSTALLED_INPUT_LANGUAGES } from '../telex/core/InputLanguageCatalog';
 import { PreferencesManager } from '../telex/core/PreferencesManager';
 import { DEFAULT_KEYBOARD_BG_COLOR, DEFAULT_KEYBOARD_DARK_MODE, DEFAULT_KEYBOARD_KEY_COLOR,
   DEFAULT_KEYBOARD_KEY_OPACITY, DEFAULT_KEYBOARD_OPACITY, getKeyboardTextColor, GTV_BG_COLOR_KEY,
-  GTV_BG_OPACITY_KEY, GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_KEY_OPACITY_KEY,
+  GTV_BG_OPACITY_KEY, GTV_DARK_MODE_KEY, GTV_KEY_COLOR_KEY, GTV_TEXT_COLOR_KEY, DEFAULT_KEYBOARD_TEXT_COLOR, GTV_KEY_OPACITY_KEY,
   GTV_SHOW_NUMBER_ROW_KEY, KEYBOARD_COLOR_PALETTE, KEYBOARD_THEME_PRESETS, KeyboardThemePreset,
   normalizeKeyboardOpacity } from '../telex/ui/KeyboardTheme';
-
+import {
+  GTV_KEY_SIZE_LABEL_KEY,
+  GTV_SOUND_ENABLED_KEY,
+  GTV_VIBRATION_ENABLED_KEY,
+  GTV_CLIPBOARD_ENABLED_KEY,
+  GTV_SUGGESTION_ENABLED_KEY,
+  GTV_AUTO_CAPITALIZE_KEY,
+  GTV_AUTO_SPACE_PUNCTUATION_KEY,
+  GTV_KEY_POPUP_PREVIEW_KEY,
+  GTV_KEYBOARD_HEIGHT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY,
+  GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY,
+  GTV_KEY_SOUND_VOLUME_KEY,
+  GTV_VIBRATION_STRENGTH_KEY,
+  DEFAULT_KEY_SIZE_LABEL,
+  DEFAULT_SOUND_ENABLED,
+  DEFAULT_VIBRATION_ENABLED,
+  DEFAULT_CLIPBOARD_ENABLED,
+  DEFAULT_SUGGESTION_ENABLED,
+  DEFAULT_AUTO_CAPITALIZE,
+  DEFAULT_AUTO_SPACE_PUNCTUATION,
+  DEFAULT_KEY_POPUP_PREVIEW,
+  DEFAULT_KEYBOARD_HEIGHT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP,
+  DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP,
+  DEFAULT_KEY_SOUND_VOLUME,
+  DEFAULT_VIBRATION_STRENGTH,
+  GTV_LONG_PRESS_ENABLED_KEY,
+  GTV_SWIPE_SPACE_ENABLED_KEY,
+  GTV_TRANSLATION_ENABLED_KEY,
+  GTV_AUTOCORRECT_ENABLED_KEY,
+  GTV_SHORTHAND_ENABLED_KEY,
+  GTV_BACKGROUND_IMAGE_KEY,
+  DEFAULT_LONG_PRESS_ENABLED,
+  DEFAULT_SWIPE_SPACE_ENABLED,
+  DEFAULT_TRANSLATION_ENABLED,
+  DEFAULT_AUTOCORRECT_ENABLED,
+  DEFAULT_SHORTHAND_ENABLED,
+  DEFAULT_BACKGROUND_IMAGE
+} from '../telex/core/KeyboardSettingsKeys';
 const GTV_BUNDLE_NAME = 'com.example.gotiengviet';
+const GTV_SETTINGS_CHANGED_EVENT = 'com.example.gotiengviet.SETTINGS_CHANGED';
 const APP_DETAILS_ACTION = 'ohos.settings.application.details';
 const MANAGE_APPLICATIONS_ACTION = 'ohos.settings.manage.applications';
 const PERMISSION_VOICE: Permissions[] = ['ohos.permission.MICROPHONE'];
@@ -62,6 +103,7 @@ struct SettingsPage {
   @State fontSizeValue: number = 16;
   @State bgBaseColor: string = DEFAULT_KEYBOARD_BG_COLOR;
   @State keyBaseColor: string = DEFAULT_KEYBOARD_KEY_COLOR;
+  @State textBaseColor: string = DEFAULT_KEYBOARD_TEXT_COLOR;
   @State draftBackgroundOpacity: number = DEFAULT_KEYBOARD_OPACITY;
   @State draftKeyOpacity: number = DEFAULT_KEYBOARD_KEY_OPACITY;
   @State draftBgBaseColor: string = DEFAULT_KEYBOARD_BG_COLOR;
@@ -69,7 +111,9 @@ struct SettingsPage {
   @State draftDarkMode: boolean = DEFAULT_KEYBOARD_DARK_MODE;
   @State appearanceSavedMessage: string = '';
   @State fontWeightLevel: string = 'Vừa';
-  @State keyboardWindowHeight: number = 280;
+  @State keyboardWindowHeight: number = DEFAULT_KEYBOARD_HEIGHT_VP;
+  @State keyboardPortraitHeight: number = DEFAULT_KEYBOARD_HEIGHT_PORTRAIT_VP;
+  @State keyboardLandscapeHeight: number = DEFAULT_KEYBOARD_HEIGHT_LANDSCAPE_VP;
   @State resizableKeyboard: boolean = true;
   @State enterToSend: boolean = false;
   @State autoCapitalize: boolean = true;
@@ -92,17 +136,43 @@ struct SettingsPage {
   @State keyboardPreviewWidthPercent: number = 94;
   @State resizeStartHeight: number = 280;
   @State resizeStartWidthPercent: number = 94;
+  @State longPressEnabled: boolean = true;
+  @State swipeSpaceEnabled: boolean = true;
+  @State shorthandEnabled: boolean = false;
+  @State bgImage: string = '';
 
   // Theme colors
   private bg: string = '#0A0A1E';
   private cardBg: string = '#12122A';
   private accentColor: string = '#E94560';
+  private isLandscapeOrientation: boolean = false;
   private accentLight: string = '#FF6B80';
   private textPrimary: string = '#EAEAEA';
   private textSecondary: string = '#8888AA';
   private divider: string = '#1E1E3A';
 
+  private detectOrientation(): void {
+    try {
+      const d = display.getDefaultDisplaySync();
+      this.isLandscapeOrientation = d.width > d.height;
+    } catch (_) {
+      this.isLandscapeOrientation = false;
+    }
+  }
+
+  private getHeightSettingKey(): string {
+    return this.isLandscapeOrientation ? GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY : GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY;
+  }
+
+  private async loadCurrentKeyboardHeight(): Promise<number> {
+    const fallbackHeight = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_VP_KEY, DEFAULT_KEYBOARD_HEIGHT_VP) as number;
+    const savedHeight = await PreferencesManager.get(this.getHeightSettingKey(), fallbackHeight) as number;
+    const parsedHeight = typeof savedHeight === 'number' ? savedHeight : fallbackHeight;
+    return Math.round(Math.min(420, Math.max(180, Number(parsedHeight) || DEFAULT_KEYBOARD_HEIGHT_VP)));
+  }
+
   aboutToAppear(): void {
+    this.detectOrientation();
     this.checkInputMethodStatus();
     this.refreshPermissionStatus();
     PreferencesManager.init(getContext(this)).then(() => {
@@ -116,13 +186,70 @@ struct SettingsPage {
     this.numberRowEnabled = await PreferencesManager.get(GTV_SHOW_NUMBER_ROW_KEY, true) as boolean;
     this.bgBaseColor = await PreferencesManager.get(GTV_BG_COLOR_KEY, DEFAULT_KEYBOARD_BG_COLOR) as string;
     this.keyBaseColor = await PreferencesManager.get(GTV_KEY_COLOR_KEY, DEFAULT_KEYBOARD_KEY_COLOR) as string;
+    this.textBaseColor = await PreferencesManager.get(GTV_TEXT_COLOR_KEY, DEFAULT_KEYBOARD_TEXT_COLOR) as string;
     this.darkMode = await PreferencesManager.get(GTV_DARK_MODE_KEY, DEFAULT_KEYBOARD_DARK_MODE) as boolean;
+
+    this.detectOrientation();
+    const fallbackLegacy = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_VP_KEY, DEFAULT_KEYBOARD_HEIGHT_VP) as number;
+    this.keyboardPortraitHeight = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, fallbackLegacy) as number;
+    this.keyboardLandscapeHeight = await PreferencesManager.get(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, fallbackLegacy) as number;
+    this.keyboardWindowHeight = this.isLandscapeOrientation ? this.keyboardLandscapeHeight : this.keyboardPortraitHeight;
+
+    this.sound = await PreferencesManager.get(GTV_SOUND_ENABLED_KEY, DEFAULT_SOUND_ENABLED) as boolean;
+    this.vibration = await PreferencesManager.get(GTV_VIBRATION_ENABLED_KEY, DEFAULT_VIBRATION_ENABLED) as boolean;
+    this.clipboardDailyStore = await PreferencesManager.get(GTV_CLIPBOARD_ENABLED_KEY, DEFAULT_CLIPBOARD_ENABLED) as boolean;
+    this.textSuggestion = await PreferencesManager.get(GTV_SUGGESTION_ENABLED_KEY, DEFAULT_SUGGESTION_ENABLED) as boolean;
+
+    this.autoCapitalize = await PreferencesManager.get(GTV_AUTO_CAPITALIZE_KEY, DEFAULT_AUTO_CAPITALIZE) as boolean;
+    this.autoSpaceAfterPunctuation = await PreferencesManager.get(GTV_AUTO_SPACE_PUNCTUATION_KEY, DEFAULT_AUTO_SPACE_PUNCTUATION) as boolean;
+    this.keyPopupPreview = await PreferencesManager.get(GTV_KEY_POPUP_PREVIEW_KEY, DEFAULT_KEY_POPUP_PREVIEW) as boolean;
+
+    this.keySoundVolume = await PreferencesManager.get(GTV_KEY_SOUND_VOLUME_KEY, DEFAULT_KEY_SOUND_VOLUME) as number;
+    this.vibrationStrength = await PreferencesManager.get(GTV_VIBRATION_STRENGTH_KEY, DEFAULT_VIBRATION_STRENGTH) as number;
+    this.longPressEnabled = await PreferencesManager.get(GTV_LONG_PRESS_ENABLED_KEY, DEFAULT_LONG_PRESS_ENABLED) as boolean;
+    this.swipeSpaceEnabled = await PreferencesManager.get(GTV_SWIPE_SPACE_ENABLED_KEY, DEFAULT_SWIPE_SPACE_ENABLED) as boolean;
+    this.translateEnabled = await PreferencesManager.get(GTV_TRANSLATION_ENABLED_KEY, DEFAULT_TRANSLATION_ENABLED) as boolean;
+    this.autocorrect = await PreferencesManager.get(GTV_AUTOCORRECT_ENABLED_KEY, DEFAULT_AUTOCORRECT_ENABLED) as boolean;
+    this.shorthandEnabled = await PreferencesManager.get(GTV_SHORTHAND_ENABLED_KEY, DEFAULT_SHORTHAND_ENABLED) as boolean;
+    this.bgImage = await PreferencesManager.get(GTV_BACKGROUND_IMAGE_KEY, DEFAULT_BACKGROUND_IMAGE) as string;
+
     this.syncAppearanceDrafts();
   }
 
-  async saveSetting(key: string, value: preferences.ValueType): Promise<void> {
+  async saveSetting(key: string, value: preferences.ValueType, notifyKeyboard: boolean = true): Promise<void> {
     await PreferencesManager.set(key, value);
+    this.notifyKeyboardSettingsChanged();
     AppStorage.setOrCreate(key, value);
+    if (notifyKeyboard) {
+      this.notifyKeyboardSettingsChanged();
+    }
+  }
+
+  private notifyKeyboardSettingsChanged(): void {
+    let payload = JSON.stringify({
+      backgroundOpacity: this.backgroundOpacity,
+      keyOpacity: this.keyOpacity,
+      bgBaseColor: this.bgBaseColor,
+      keyBaseColor: this.keyBaseColor,
+      textBaseColor: this.textBaseColor,
+      darkMode: this.darkMode,
+      keyboardPortraitHeightVp: this.keyboardPortraitHeight,
+      keyboardLandscapeHeightVp: this.keyboardLandscapeHeight,
+      sound: this.sound,
+      vibration: this.vibration,
+      clipboardDailyStore: this.clipboardDailyStore,
+      numberRowEnabled: this.numberRowEnabled,
+      longPressEnabled: this.longPressEnabled,
+      swipeSpaceEnabled: this.swipeSpaceEnabled,
+      translateEnabled: this.translateEnabled,
+      autocorrect: this.autocorrect,
+      shorthandEnabled: this.shorthandEnabled,
+      backgroundImage: this.bgImage
+    });
+
+    commonEventManager.publish(GTV_SETTINGS_CHANGED_EVENT, {
+      data: payload
+    }, () =>{});
   }
 
   syncAppearanceDrafts(): void {
@@ -139,19 +266,21 @@ struct SettingsPage {
     this.bgBaseColor = this.draftBgBaseColor;
     this.keyBaseColor = this.draftKeyBaseColor;
     this.darkMode = this.draftDarkMode;
-    await this.saveSetting(GTV_BG_OPACITY_KEY, this.backgroundOpacity);
-    await this.saveSetting(GTV_KEY_OPACITY_KEY, this.keyOpacity);
-    await this.saveSetting(GTV_BG_COLOR_KEY, this.bgBaseColor);
-    await this.saveSetting(GTV_KEY_COLOR_KEY, this.keyBaseColor);
-    await this.saveSetting(GTV_DARK_MODE_KEY, this.darkMode);
-    // Thông báo cho bàn phím
-    KeyboardBridge.sendThemeChanged();
+    await this.saveSetting(GTV_BG_OPACITY_KEY, this.backgroundOpacity, false);
+    await this.saveSetting(GTV_KEY_OPACITY_KEY, this.keyOpacity, false);
+    await this.saveSetting(GTV_BG_COLOR_KEY, this.bgBaseColor, false);
+    await this.saveSetting(GTV_KEY_COLOR_KEY, this.keyBaseColor, false);
+    await this.saveSetting(GTV_TEXT_COLOR_KEY, this.textBaseColor, false);
+    await this.saveSetting(GTV_DARK_MODE_KEY, this.darkMode, false);
+    this.notifyKeyboardSettingsChanged();
     this.appearanceSavedMessage = 'Đã lưu và áp dụng giao diện';
   }
 
   applyThemePreset(preset: KeyboardThemePreset): void {
     this.draftBgBaseColor = preset.bgColor;
     this.draftKeyBaseColor = preset.keyColor;
+    this.textBaseColor = preset.textColor || "";
+    
     this.draftBackgroundOpacity = preset.bgOpacity;
     this.draftKeyOpacity = preset.keyOpacity;
     this.draftDarkMode = preset.darkMode;
@@ -172,6 +301,9 @@ struct SettingsPage {
 
   onPageShow(): void {
     this.refreshPermissionStatus();
+    PreferencesManager.init(getContext(this), true).then(() => {
+      this.loadSettings();
+    });
   }
 
   async checkInputMethodStatus(): Promise<void> {
@@ -337,8 +469,12 @@ struct SettingsPage {
         Scroll() {
           Column() {
             if (this.selectedTab === 0) {
-              this.buildMainSettings()
-            } else if (this.selectedTab === 1) {
+          Scroll() {
+            this.buildMainSettings()
+          }
+          .layoutWeight(1)
+          .scrollBar(BarState.Off)
+        } else if (this.selectedTab === 1) {
               this.buildGuide()
             } else {
               this.buildAbout()
@@ -545,16 +681,318 @@ struct SettingsPage {
     .onClick(() => { this.selectedTab = index; })
   }
 
+
+  getDemoKeyScale(): number {
+    if (this.fontWeightLevel === 'Nhỏ') return 0.88;
+    if (this.fontWeightLevel === 'Lớn') return 1.14;
+    return 1.0;
+  }
+  
+  getDemoKeyHeight(): number {
+    return 40 * (this.keyboardWindowHeight / 260) * this.getDemoKeyScale();
+  }
+  
+  getDemoKeyFontSize(baseSize: number): number {
+    return baseSize * this.getDemoKeyScale();
+  }
+
+  @Builder
+  buildDemoKeyboard() {
+    Column() {
+      Row() {
+        ForEach(['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'], (key: string) => {
+          Text(key)
+            .layoutWeight(1)
+            .height(this.getDemoKeyHeight())
+            .margin(2)
+            .backgroundColor(this.keyBaseColor)
+            .fontColor(this.textBaseColor ? this.textBaseColor : this.getKeyTextColor(this.keyBaseColor))
+            .fontSize(this.getDemoKeyFontSize(16))
+            .textAlign(TextAlign.Center)
+            .borderRadius(4)
+        })
+      }.width('100%').padding({ left: 2, right: 2 })
+      
+      Row() {
+        ForEach(['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'], (key: string) => {
+          Text(key)
+            .layoutWeight(1)
+            .height(this.getDemoKeyHeight())
+            .margin(2)
+            .backgroundColor(this.keyBaseColor)
+            .fontColor(this.textBaseColor ? this.textBaseColor : this.getKeyTextColor(this.keyBaseColor))
+            .fontSize(this.getDemoKeyFontSize(16))
+            .textAlign(TextAlign.Center)
+            .borderRadius(4)
+        })
+      }.width('90%').padding({ left: 2, right: 2 })
+      
+      Row() {
+        Text('⇧')
+          .width(45)
+          .height(this.getDemoKeyHeight())
+          .margin(2)
+          .backgroundColor(this.darkMode ? '#3D3D3D' : '#B0B4C0')
+          .fontColor(this.darkMode ? '#FFFFFF' : '#000000')
+          .fontSize(this.getDemoKeyFontSize(16))
+          .textAlign(TextAlign.Center)
+          .borderRadius(4)
+          
+        ForEach(['Z', 'X', 'C', 'V', 'B', 'N', 'M'], (key: string) => {
+          Text(key)
+            .layoutWeight(1)
+            .height(this.getDemoKeyHeight())
+            .margin(2)
+            .backgroundColor(this.keyBaseColor)
+            .fontColor(this.textBaseColor ? this.textBaseColor : this.getKeyTextColor(this.keyBaseColor))
+            .fontSize(this.getDemoKeyFontSize(16))
+            .textAlign(TextAlign.Center)
+            .borderRadius(4)
+        })
+        
+        Text('⌫')
+          .width(45)
+          .height(this.getDemoKeyHeight())
+          .margin(2)
+          .backgroundColor(this.darkMode ? '#3D3D3D' : '#B0B4C0')
+          .fontColor(this.darkMode ? '#FFFFFF' : '#000000')
+          .fontSize(this.getDemoKeyFontSize(16))
+          .textAlign(TextAlign.Center)
+          .borderRadius(4)
+      }.width('100%').padding({ left: 2, right: 2 })
+      
+      Row() {
+        Text('?123')
+          .layoutWeight(1)
+          .height(this.getDemoKeyHeight())
+          .margin(2)
+          .backgroundColor(this.darkMode ? '#3D3D3D' : '#B0B4C0')
+          .fontColor(this.darkMode ? '#FFFFFF' : '#000000')
+          .fontSize(this.getDemoKeyFontSize(14))
+          .textAlign(TextAlign.Center)
+          .borderRadius(4)
+          
+        Text('GoTiengViet')
+          .layoutWeight(4)
+          .height(this.getDemoKeyHeight())
+          .margin(2)
+          .backgroundColor(this.keyBaseColor)
+          .fontColor(this.textBaseColor ? this.textBaseColor : this.getKeyTextColor(this.keyBaseColor))
+          .fontSize(this.getDemoKeyFontSize(14))
+          .textAlign(TextAlign.Center)
+          .borderRadius(4)
+          
+        Text('⏎')
+          .layoutWeight(1)
+          .height(this.getDemoKeyHeight())
+          .margin(2)
+          .backgroundColor('#4A90D9')
+          .fontColor('#FFFFFF')
+          .fontSize(this.getDemoKeyFontSize(16))
+          .textAlign(TextAlign.Center)
+          .borderRadius(4)
+      }.width('100%').padding({ left: 2, right: 2 })
+    }
+    .width('100%')
+    .padding({ top: 10, bottom: 10 })
+    .backgroundColor(this.bgBaseColor)
+    .borderRadius(8)
+    .margin({ top: 10, bottom: 10 })
+    .opacity(this.backgroundOpacity / 100)
+  }
+
   @Builder
   buildMainSettings() {
     Column() {
-      // this.buildPermissionCard()
-
-      this.buildSectionTitle('Danh sách chức năng')
-
+      // 1. Quản lý giao diện
+      this.buildSectionTitle('Quản lý giao diện')
       Column() {
-        ForEach(this.getFeatureEntries(), (feature: FeatureEntry, index: number) => {
-          this.buildFeatureListItem(feature, index)
+        TextInput({ placeholder: 'Gõ thử bàn phím...' })
+          .width('90%')
+          .height(40)
+          .margin({ top: 10, bottom: 10 })
+          .backgroundColor('#202040')
+          .fontColor(this.textPrimary)
+          .placeholderColor(this.textSecondary)
+        
+        this.buildDemoKeyboard()
+        this.buildToggleRow('Chế độ Tối / Sáng', '◐', this.darkMode, (val: boolean) => {
+          this.darkMode = val;
+          this.saveSetting(GTV_DARK_MODE_KEY, val);
+        })
+        
+        Text('Màu nền').fontSize(14).fontColor(this.textPrimary).width('100%').padding({ left: 20, top: 8, bottom: 8 })
+        Scroll() {
+          Row() {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Circle({ width: 36, height: 36 })
+                .fill(color)
+                .margin(6)
+                .border({ width: this.bgBaseColor === color ? 3 : 0, color: '#4FC3F7' })
+                .onClick(() => {
+                  this.bgBaseColor = color;
+                  this.saveSetting(GTV_BG_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 14, right: 14 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+
+        Text('Màu phím').fontSize(14).fontColor(this.textPrimary).width('100%').padding({ left: 20, top: 8, bottom: 8 })
+        Scroll() {
+          Row() {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Circle({ width: 36, height: 36 })
+                .fill(color)
+                .margin(6)
+                .border({ width: this.keyBaseColor === color ? 3 : 0, color: '#4FC3F7' })
+                .onClick(() => {
+                  this.keyBaseColor = color;
+                  this.saveSetting(GTV_KEY_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 14, right: 14 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+
+
+        Text('Màu chữ phím').fontSize(14).fontColor(this.textPrimary).width('100%').padding({ left: 20, top: 8, bottom: 8 })
+        Scroll() {
+          Row() {
+            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
+              Circle({ width: 36, height: 36 })
+                .fill(color)
+                .margin(6)
+                .border({ width: this.textBaseColor === color ? 3 : 0, color: '#4FC3F7' })
+                .onClick(() => {
+                  this.textBaseColor = color;
+                  this.saveSetting(GTV_TEXT_COLOR_KEY, color);
+                })
+            })
+          }.width('100%').padding({ left: 14, right: 14 })
+        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
+
+        this.buildActionRow('Chọn hình nền', 'Chưa có hình nền', () => {
+          this.showDeveloping('Chọn hình nền (làm sau)');
+        })
+
+        this.buildSliderSetting('Độ trong suốt nền', `${this.backgroundOpacity}%`, this.backgroundOpacity, 10, 100, 1, (value: number) => {
+          this.backgroundOpacity = Math.round(value);
+          this.saveSetting(GTV_BG_OPACITY_KEY, this.backgroundOpacity);
+        })
+        
+        this.buildSliderSetting('Độ trong suốt phím', `${this.keyOpacity}%`, this.keyOpacity, 10, 100, 1, (value: number) => {
+          this.keyOpacity = Math.round(value);
+          this.saveSetting(GTV_KEY_OPACITY_KEY, this.keyOpacity);
+        })
+
+        this.buildSliderSetting(this.isLandscapeOrientation ? 'Chiều cao chữ (ngang)' : 'Chiều cao chữ (dọc)', `${this.keyboardWindowHeight}vp`, this.keyboardWindowHeight, 180, 450, 5, (value: number) => {
+          const nextHeight = Math.round(value);
+          this.keyboardWindowHeight = nextHeight;
+          if (this.isLandscapeOrientation) {
+            this.keyboardLandscapeHeight = nextHeight;
+            this.saveSetting(GTV_KEYBOARD_HEIGHT_LANDSCAPE_VP_KEY, nextHeight);
+          } else {
+            this.keyboardPortraitHeight = nextHeight;
+            this.saveSetting(GTV_KEYBOARD_HEIGHT_PORTRAIT_VP_KEY, nextHeight);
+          }
+        })
+        this.buildSettingNote('Chiều cao trên là chiều cao cơ bản (5 hàng). Bật hàng số sẽ tự động cộng thêm chiều cao 1 hàng để phím chữ không lùn đi.')
+        
+      }
+      .width('90%')
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+      .clip(true)
+      .margin({ bottom: 20 })
+
+      // 2. Quản lý nhập liệu
+      this.buildSectionTitle('Quản lý nhập liệu')
+      Column() {
+        this.buildToggleRow('Bật hàng phím số', '123', this.numberRowEnabled, (val: boolean) => {
+          this.numberRowEnabled = val;
+          this.saveSetting(GTV_SHOW_NUMBER_ROW_KEY, val);
+        })
+
+        this.buildToggleRow('Clipboard', '📋', this.clipboardDailyStore, (val: boolean) => {
+          this.clipboardDailyStore = val;
+          this.saveSetting(GTV_CLIPBOARD_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Long-press', '⏱️', this.longPressEnabled, (val: boolean) => {
+          this.longPressEnabled = val;
+          this.saveSetting(GTV_LONG_PRESS_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Gợi ý từ (Candidate)', '💡', this.textSuggestion, (val: boolean) => {
+          this.textSuggestion = val;
+          this.saveSetting(GTV_SUGGESTION_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Vuốt phím cách để di con trỏ', '↔️', this.swipeSpaceEnabled, (val: boolean) => {
+          this.swipeSpaceEnabled = val;
+          this.saveSetting(GTV_SWIPE_SPACE_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Viết hoa chữ cái đầu (làm sau)', '🔠', this.autoCapitalize, (val: boolean) => {
+          this.autoCapitalize = val;
+          this.saveSetting(GTV_AUTO_CAPITALIZE_KEY, val);
+        })
+
+        this.buildToggleRow('Âm thanh khi ấn phím (làm sau)', '🔊', this.sound, (val: boolean) => {
+          this.sound = val;
+          this.saveSetting(GTV_SOUND_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Rung khi ấn phím (làm sau)', '📳', this.vibration, (val: boolean) => {
+          this.vibration = val;
+          this.saveSetting(GTV_VIBRATION_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Popup khi ấn phím (làm sau)', '💬', this.keyPopupPreview, (val: boolean) => {
+          this.keyPopupPreview = val;
+          this.saveSetting(GTV_KEY_POPUP_PREVIEW_KEY, val);
+        })
+
+        this.buildToggleRow('Dịch ngôn ngữ (làm sau)', '🌐', this.translateEnabled, (val: boolean) => {
+          this.translateEnabled = val;
+          this.saveSetting(GTV_TRANSLATION_ENABLED_KEY, val);
+        })
+
+        this.buildToggleRow('Tự động sửa lỗi', '✏️', this.autocorrect, (val: boolean) => {
+          this.autocorrect = val;
+          this.saveSetting(GTV_AUTOCORRECT_ENABLED_KEY, val);
+        })
+      }
+      .width('90%')
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+      .clip(true)
+      .margin({ bottom: 20 })
+
+      // 3. Quản lý ngôn ngữ
+      this.buildSectionTitle('Quản lý ngôn ngữ')
+      Column() {
+        this.buildActionRow('Ngôn ngữ (làm sau)', 'Tiếng Việt', () => {
+          this.showDeveloping('Chọn ngôn ngữ');
+        })
+        this.buildChoiceRow('Kiểu gõ (làm sau)', ['Telex', 'VNI'], 'Telex', (value: string) => {
+          this.showDeveloping('Chọn kiểu gõ: ' + value);
+        })
+      }
+      .width('90%')
+      .backgroundColor(this.cardBg)
+      .borderRadius(16)
+      .clip(true)
+      .margin({ bottom: 20 })
+
+      // 4. Quản lý từ điển
+      this.buildSectionTitle('Quản lý từ điển')
+      Column() {
+        this.buildToggleRow('Bật tắt nhập tắt (làm sau)', '⚡', this.shorthandEnabled, (val: boolean) => {
+          this.shorthandEnabled = val;
+          this.saveSetting(GTV_SHORTHAND_ENABLED_KEY, val);
+        })
+        this.buildActionRow('Danh sách từ viết tắt (làm sau)', '0 từ', () => {
+          this.showDeveloping('Quản lý danh sách viết tắt');
         })
       }
       .width('90%')
@@ -566,571 +1004,6 @@ struct SettingsPage {
     .width('100%')
     .alignItems(HorizontalAlign.Center)
     .padding({ top: 16 })
-  }
-
-  private getFeatureEntries(): FeatureEntry[] {
-    const rows: FeatureEntry[] = [];
-    rows.push({
-      id: 'appearance',
-      title: 'Quản lý giao diện',
-      subtitle: 'Màu nền, màu phím, độ trong, hàng số, kiểu chữ, giao diện đã lưu',
-      icon: '🎨'
-    });
-    rows.push({
-      id: 'size',
-      title: 'Thay đổi kích thước',
-      subtitle: 'Cỡ chữ, độ đậm, chiều cao cửa sổ phím và kéo bàn phím',
-      icon: '↕️'
-    });
-    rows.push({
-      id: 'language',
-      title: 'Bộ quản lý ngôn ngữ',
-      subtitle: 'Danh sách tiếng, kiểu gõ, tải thêm hoặc xoá gói ngôn ngữ',
-      icon: '🌐'
-    });
-    rows.push({
-      id: 'typing',
-      title: 'Phương pháp gõ',
-      subtitle: 'Enter, tự viết hoa, dấu cách, gợi ý, sửa lỗi, dịch, clipboard',
-      icon: '⌨️'
-    });
-    rows.push({
-      id: 'button',
-      title: 'Cài đặt nút',
-      subtitle: 'Âm thanh, rung, pop-up phím và thời gian giữ phím',
-      icon: '🔘'
-    });
-    rows.push({
-      id: 'sticker',
-      title: 'Quản lý sticker',
-      subtitle: 'Chèn GIF từ file và lưu thành bộ sticker',
-      icon: '🖼️'
-    });
-    rows.push({
-      id: 'voice',
-      title: 'Nhập bằng giọng nói',
-      subtitle: 'Chỉ tiếng Việt, chọn model nhanh và bật tắt nhập giọng nói',
-      icon: '🎙️'
-    });
-    return rows;
-  }
-
-  // @Builder
-  // buildPermissionCard() {
-  //   this.buildSectionTitle('Cấp quyền')
-  //
-  //   Column() {
-  //     this.buildPermissionRow('🎙️', 'Voice', 'Micro cho nhập bằng giọng nói', this.permissionVoice)
-  //     Divider().color(this.divider).margin({ left: 20, right: 20 })
-  //     this.buildPermissionRow('🖼️', 'Media', 'Ảnh, GIF và âm thanh phím', this.permissionMedia)
-  //     Divider().color(this.divider).margin({ left: 20, right: 20 })
-  //     this.buildPermissionRow('📁', 'File', 'Chọn file sticker, âm phím và ảnh nền', this.permissionFile)
-  //     Divider().color(this.divider).margin({ left: 20, right: 20 })
-  //     this.buildPermissionRow('🌍', 'Mạng', 'Dịch, tải model và tải gói ngôn ngữ', this.permissionNetwork)
-  //     Divider().color(this.divider).margin({ left: 20, right: 20 })
-  //     this.buildPermissionRow('🚀', 'Mở cùng với máy', 'Chuẩn bị dịch vụ bàn phím sau khi khởi động', this.permissionStartup)
-  //
-  //     Button('Mở cài đặt app GoTiếngViệt')
-  //       .width('88%')
-  //       .height(42)
-  //       .backgroundColor(this.accentColor)
-  //       .fontColor(Color.White)
-  //       .borderRadius(21)
-  //       .margin({ top: 12, bottom: 16 })
-  //       .onClick(() => {
-  //         this.openAppPermissionSettings();
-  //       })
-  //   }
-  //   .width('90%')
-  //   .backgroundColor(this.cardBg)
-  //   .borderRadius(16)
-  //   .clip(true)
-  //   .margin({ bottom: 20 })
-  // }
-
-  @Builder
-  buildFeatureListItem(feature: FeatureEntry, index: number) {
-    Column() {
-      Row() {
-        Text(feature.icon)
-          .fontSize(20)
-          .margin({ right: 12 })
-
-        Column() {
-          Text(feature.title)
-            .fontSize(15)
-            .fontColor(this.textPrimary)
-            .fontWeight(FontWeight.Medium)
-          Text(feature.subtitle)
-            .fontSize(11)
-            .fontColor(this.textSecondary)
-            .margin({ top: 3 })
-            .maxLines(2)
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
-
-        Text(this.openedFeature === feature.id ? '⌄' : '›')
-          .fontSize(22)
-          .fontColor(this.openedFeature === feature.id ? this.accentLight : this.textSecondary)
-      }
-      .width('100%')
-      .padding({ left: 18, right: 16, top: 14, bottom: 14 })
-      .alignItems(VerticalAlign.Center)
-      .backgroundColor(this.openedFeature === feature.id ? '#171735' : 'transparent')
-      .onClick(() => {
-        this.openedFeature = this.openedFeature === feature.id ? '' : feature.id;
-      })
-
-      if (this.openedFeature === feature.id) {
-        Divider().color(this.divider).margin({ left: 20, right: 20 })
-        this.buildFeatureDetail(feature.id)
-      }
-
-      Divider().color(this.divider).margin({ left: 20, right: 20 })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildFeatureDetail(featureId: string) {
-    Column() {
-      if (featureId === 'appearance') {
-        this.buildAppearanceSettings()
-      } else if (featureId === 'size') {
-        this.buildSizeSettings()
-      } else if (featureId === 'language') {
-        this.buildLanguageSettings()
-      } else if (featureId === 'typing') {
-        this.buildTypingSettings()
-      } else if (featureId === 'button') {
-        this.buildButtonSettings()
-      } else if (featureId === 'sticker') {
-        this.buildStickerSettings()
-      } else if (featureId === 'voice') {
-        this.buildVoiceSettings()
-      }
-    }
-    .width('100%')
-    .padding({ left: 14, right: 14, top: 12, bottom: 16 })
-    .backgroundColor('#101026')
-  }
-
-  @Builder
-  buildPermissionRow(icon: string, title: string, subtitle: string, value: boolean) {
-    Row() {
-      Text(icon)
-        .fontSize(20)
-        .margin({ right: 12 })
-
-      Column() {
-        Text(title)
-          .fontSize(15)
-          .fontColor(this.textPrimary)
-        Text(subtitle)
-          .fontSize(11)
-          .fontColor(this.textSecondary)
-          .margin({ top: 3 })
-      }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
-
-      Text(value ? '✓' : '')
-        .fontSize(15)
-        .fontColor(Color.White)
-        .fontWeight(FontWeight.Bold)
-        .textAlign(TextAlign.Center)
-        .width(28)
-        .height(28)
-        .backgroundColor(value ? '#1A6A40' : '#252545')
-        .border({ width: 1.5, color: value ? '#5EF29B' : '#4A4A68' })
-        .borderRadius(14)
-    }
-    .width('100%')
-    .padding({ left: 20, right: 20, top: 13, bottom: 13 })
-    .alignItems(VerticalAlign.Center)
-    .onClick(() => {
-      this.openAppPermissionSettings();
-    })
-  }
-
-  @Builder
-  buildAppearanceSettings() {
-    Column() {
-      // Keyboard Preview
-      Column() {
-        Text("Xem trước bàn phím")
-          .fontSize(12).fontColor(this.textSecondary).margin({bottom: 8})
-        
-        Stack() {
-          Row({ space: 6 }) {
-            Button("Q").type(ButtonType.Normal).borderRadius(6).backgroundColor(this.draftKeyBaseColor).fontColor(this.getKeyTextColor(this.draftKeyBaseColor)).opacity(normalizeKeyboardOpacity(this.draftKeyOpacity)).width(36).height(46)
-            Button("W").type(ButtonType.Normal).borderRadius(6).backgroundColor(this.draftKeyBaseColor).fontColor(this.getKeyTextColor(this.draftKeyBaseColor)).opacity(normalizeKeyboardOpacity(this.draftKeyOpacity)).width(36).height(46)
-            Button("E").type(ButtonType.Normal).borderRadius(6).backgroundColor(this.draftKeyBaseColor).fontColor(this.getKeyTextColor(this.draftKeyBaseColor)).opacity(normalizeKeyboardOpacity(this.draftKeyOpacity)).width(36).height(46)
-            Button("R").type(ButtonType.Normal).borderRadius(6).backgroundColor(this.draftKeyBaseColor).fontColor(this.getKeyTextColor(this.draftKeyBaseColor)).opacity(normalizeKeyboardOpacity(this.draftKeyOpacity)).width(36).height(46)
-          }
-          .width('100%').height(70)
-          .backgroundColor(this.draftBgBaseColor)
-          .opacity(normalizeKeyboardOpacity(this.draftBackgroundOpacity))
-          .borderRadius(8)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          }.width('90%').margin({bottom: 24}).backgroundColor('#000000').borderRadius(8)
-        }.width('100%')
-
-        this.buildToggleRow('Chế độ tối cho bàn phím', '◐', this.draftDarkMode, (val: boolean) => {
-          this.draftDarkMode = val;
-          this.appearanceSavedMessage = '';
-        })
-
-        // Nền sau phím
-        Column() {
-          Text('Nền sau phím').fontSize(14).fontColor(this.textPrimary).width('100%').margin({ bottom: 8 })
-        Scroll() {
-          Row() {
-            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
-              Button().width(36).height(36).backgroundColor(color).borderRadius(18).margin({ right: 12 })
-                .border({ width: this.draftBgBaseColor === color ? 2 : 1, color: this.draftBgBaseColor === color ? '#5EF29B' : '#FFFFFF33' })
-                .onClick(() => {
-                  this.draftBgBaseColor = color;
-                  this.appearanceSavedMessage = '';
-                })
-            })
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-      }.width('100%').margin({ bottom: 20 })
-
-      // Màu phím
-      Column() {
-        Text('Màu phím').fontSize(14).fontColor(this.textPrimary).width('100%').margin({ bottom: 8 })
-        Scroll() {
-          Row() {
-            ForEach(KEYBOARD_COLOR_PALETTE, (color: string) => {
-              Button().width(36).height(36).backgroundColor(color).borderRadius(18).margin({ right: 12 })
-                .border({ width: this.draftKeyBaseColor === color ? 2 : 1, color: this.draftKeyBaseColor === color ? '#5EF29B' : '#FFFFFF33' })
-                .onClick(() => {
-                  this.draftKeyBaseColor = color;
-                  this.appearanceSavedMessage = '';
-                })
-            })
-          }
-        }.scrollable(ScrollDirection.Horizontal).scrollBar(BarState.Off)
-      }.width('100%').margin({ bottom: 20 })
-      this.buildSliderSetting('Độ trong nền', `${this.draftBackgroundOpacity}%`, this.draftBackgroundOpacity, 10, 100, 1, (value: number) => {
-        this.draftBackgroundOpacity = Math.round(value);
-        this.appearanceSavedMessage = '';
-      })
-      this.buildSliderSetting('Độ trong phím', `${this.draftKeyOpacity}%`, this.draftKeyOpacity, 10, 100, 1, (value: number) => {
-        this.draftKeyOpacity = Math.round(value);
-        this.appearanceSavedMessage = '';
-      })
-      Button('Lưu cài đặt')
-        .width('90%')
-        .height(42)
-        .fontSize(14)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(Color.White)
-        .backgroundColor(this.accentColor)
-        .borderRadius(21)
-        .margin({ top: 8, bottom: 8 })
-        .onClick(() => {
-          this.applyAppearanceSettings().catch((err: Error) => {
-            console.error('[GoTiengViet] save appearance failed:', err.message);
-          });
-        })
-      if (this.appearanceSavedMessage.length > 0) {
-        Text(this.appearanceSavedMessage)
-          .fontSize(11)
-          .fontColor('#5EF29B')
-          .width('100%')
-          .textAlign(TextAlign.Center)
-          .margin({ bottom: 8 })
-      }
-        this.buildToggleRow('Bật hàng phím số', '123', this.numberRowEnabled, (val: boolean) => {
-          this.numberRowEnabled = val;
-          this.saveSetting(GTV_SHOW_NUMBER_ROW_KEY, val);
-        })
-      this.buildToggleRow('Chữ trên bàn phím dạng hoa', 'Aa', this.uppercaseLabels, (val: boolean) => {
-        this.uppercaseLabels = val;
-      })
-      this.buildSavedThemeRow()
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildSizeSettings() {
-    Column() {
-      this.buildSliderSetting('Cỡ font chữ', `${this.fontSizeValue}sp`, this.fontSizeValue, 12, 24, 1, (value: number) => {
-        this.fontSizeValue = Math.round(value);
-      })
-      this.buildChoiceRow('Độ đậm font', ['Mỏng', 'Vừa', 'Đậm'], this.fontWeightLevel, (value: string) => {
-        this.fontWeightLevel = value;
-      })
-      this.buildSliderSetting('Chiều cao cửa sổ phím', `${this.keyboardWindowHeight}vp`, this.keyboardWindowHeight, 180, 420, 1, (value: number) => {
-        this.keyboardWindowHeight = Math.round(value);
-      })
-      this.buildToggleRow('Cho kéo mép trên/dưới bàn phím', '↕️', this.resizableKeyboard, (val: boolean) => {
-        this.resizableKeyboard = val;
-      })
-      this.buildKeyboardResizePreview()
-      this.buildSettingNote('Kéo các tay nắm ở cạnh, góc và giữa mép trên/dưới để chỉnh vùng bàn phím mô phỏng.')
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildKeyboardResizePreview() {
-    Column() {
-      Row() {
-        Text('Kích thước bàn phím')
-          .fontSize(14)
-          .fontColor(this.textPrimary)
-          .layoutWeight(1)
-        Text(`${this.keyboardPreviewWidthPercent}% • ${this.keyboardWindowHeight}vp`)
-          .fontSize(11)
-          .fontColor(this.accentLight)
-      }
-      .width('100%')
-      .alignItems(VerticalAlign.Center)
-      .margin({ bottom: 10 })
-
-      Stack({ alignContent: Alignment.Center }) {
-        Stack({ alignContent: Alignment.Center }) {
-          Column() {
-            Row() {
-              ForEach(['1','2','3','4','5','6','7','8','9','0'], (key: string) => {
-                this.buildMiniKey(key)
-              })
-            }
-            .width('100%')
-            .height(24)
-            Row() {
-              ForEach(['q','w','e','r','t','y','u','i','o','p'], (key: string) => {
-                this.buildMiniKey(key)
-              })
-            }
-            .width('100%')
-            .height(24)
-            Row() {
-              ForEach(['a','s','d','f','g','h','j','k','l'], (key: string) => {
-                this.buildMiniKey(key)
-              })
-            }
-            .width('92%')
-            .height(24)
-            Row() {
-              this.buildMiniWideKey('⇧', 1.35)
-              ForEach(['z','x','c','v','b','n','m'], (key: string) => {
-                this.buildMiniKey(key)
-              })
-              this.buildMiniWideKey('⌫', 1.35)
-            }
-            .width('100%')
-            .height(24)
-            Row() {
-              this.buildMiniWideKey('123', 1.4)
-              this.buildMiniWideKey(',', 0.8)
-              this.buildMiniWideKey('Tiếng Việt', 4)
-              this.buildMiniWideKey('.', 0.8)
-              this.buildMiniWideKey('↵', 1.4)
-            }
-            .width('100%')
-            .height(26)
-          }
-          .width('100%')
-          .height('100%')
-          .padding({ left: 6, right: 6, top: 7, bottom: 7 })
-          .backgroundColor('#EEF2F7')
-          .border({ width: 2, color: '#38A7FF' })
-          .borderRadius(8)
-
-          this.buildResizeHandle('top-left', 18, 18, 9, Alignment.TopStart)
-          this.buildResizeHandle('top', 54, 12, 6, Alignment.Top)
-          this.buildResizeHandle('top-right', 18, 18, 9, Alignment.TopEnd)
-          this.buildResizeHandle('left', 12, 48, 6, Alignment.Start)
-          this.buildResizeHandle('right', 12, 48, 6, Alignment.End)
-          this.buildResizeHandle('bottom-left', 18, 18, 9, Alignment.BottomStart)
-          this.buildResizeHandle('bottom', 54, 12, 6, Alignment.Bottom)
-          this.buildResizeHandle('bottom-right', 18, 18, 9, Alignment.BottomEnd)
-        }
-        .width(`${this.keyboardPreviewWidthPercent}%`)
-        .height(this.getKeyboardPreviewHeight())
-      }
-      .width('100%')
-      .height(188)
-      .backgroundColor('#0B0B20')
-      .borderRadius(12)
-      .padding({ left: 12, right: 12 })
-    }
-    .width('100%')
-    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-  }
-
-  @Builder
-  buildResizeHandle(handle: string, width: number, height: number, radius: number, align: Alignment) {
-    Row() {
-    }
-    .width(width)
-    .height(height)
-    .backgroundColor(this.resizableKeyboard ? '#E94560' : '#5B5B72')
-    .borderRadius(radius)
-    .border({ width: 2, color: '#FFFFFF' })
-    .align(align)
-    .opacity(this.resizableKeyboard ? 1 : 0.45)
-    .gesture(
-      PanGesture({ fingers: 1, direction: PanDirection.All, distance: 1 })
-        .onActionStart((_event: GestureEvent) => {
-          if (this.resizableKeyboard) {
-            this.beginKeyboardResize();
-          }
-        })
-        .onActionUpdate((event: GestureEvent) => {
-          if (this.resizableKeyboard) {
-            this.updateKeyboardResize(handle, event.offsetX, event.offsetY);
-          }
-        })
-    )
-  }
-
-  @Builder
-  buildMiniKey(label: string) {
-    Text(label)
-      .fontSize(9)
-      .fontColor('#566070')
-      .textAlign(TextAlign.Center)
-      .layoutWeight(1)
-      .height(20)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(4)
-      .margin({ left: 1, right: 1, top: 2, bottom: 2 })
-  }
-
-  @Builder
-  buildMiniWideKey(label: string, weight: number) {
-    Text(label)
-      .fontSize(9)
-      .fontColor('#566070')
-      .textAlign(TextAlign.Center)
-      .layoutWeight(weight)
-      .height(21)
-      .backgroundColor('#FFFFFF')
-      .borderRadius(4)
-      .margin({ left: 1, right: 1, top: 2, bottom: 2 })
-      .maxLines(1)
-      .textOverflow({ overflow: TextOverflow.Ellipsis })
-  }
-
-  @Builder
-  buildLanguageSettings() {
-    Column() {
-      ForEach(INSTALLED_INPUT_LANGUAGES, (item: InputLanguageOption, index: number) => {
-        this.buildInstalledLanguageRow(item, index)
-      })
-      this.buildActionRow('Tải thêm gói ngôn ngữ', 'Ngôn ngữ và kiểu gõ bổ sung', () => {
-        this.showDeveloping('Tải ngôn ngữ');
-      })
-      this.buildSettingNote('Danh sách này dùng chung với nút Ngôn ngữ trong layout cài đặt nhanh của bàn phím.')
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildTypingSettings() {
-    Column() {
-      this.buildToggleRow('Enter để gửi thay vì xuống dòng', '↵', this.enterToSend, (val: boolean) => {
-        this.enterToSend = val;
-      })
-      this.buildToggleRow('Tự viết hoa sau dấu câu/xuống dòng/đầu văn bản', 'A', this.autoCapitalize, (val: boolean) => {
-        this.autoCapitalize = val;
-      })
-      this.buildToggleRow('Tự thêm dấu cách sau . , : ? ! ...', '␠', this.autoSpaceAfterPunctuation, (val: boolean) => {
-        this.autoSpaceAfterPunctuation = val;
-      })
-      this.buildToggleRow('Bật gợi ý văn bản', '💬', this.textSuggestion, (val: boolean) => {
-        this.textSuggestion = val;
-      })
-      this.buildToggleRow('Tự động sửa lỗi', '✏️', this.autocorrect, (val: boolean) => {
-        this.autocorrect = val;
-      })
-      this.buildSettingNote('Khi tự sửa lỗi bật, thanh trên bàn phím sẽ có nút khôi phục cạnh nút chọn kiểu gõ trong bước làm taskbar.')
-      this.buildToggleRow('Dịch ngôn ngữ Việt - Anh', '⇄', this.translateEnabled, (val: boolean) => {
-        this.translateEnabled = val;
-        this.showDeveloping('Dịch');
-      })
-      this.buildToggleRow('Lưu clipboard trong ngày', '📋', this.clipboardDailyStore, (val: boolean) => {
-        this.clipboardDailyStore = val;
-        this.showDeveloping('Clipboard');
-      })
-      this.buildChoiceRow('Giữ clipboard trong khoảng', ['1 tiếng', '3 tiếng', '6 tiếng', '8 tiếng', '24 tiếng'], this.clipboardKeepHours, (value: string) => {
-        this.clipboardKeepHours = value;
-        this.showDeveloping('Clipboard');
-      })
-      this.buildSettingNote('Lưu text, ảnh và file trong clipboard lâu hơn có thể tăng dùng RAM, bộ nhớ nền và pin.')
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildButtonSettings() {
-    Column() {
-      this.buildToggleRow('Âm thanh khi ấn phím', '🔊', this.sound, (val: boolean) => {
-        this.sound = val;
-      })
-      this.buildSliderSetting('Âm lượng phím', `${this.keySoundVolume}%`, this.keySoundVolume, 0, 100, 1, (value: number) => {
-        this.keySoundVolume = Math.round(value);
-      })
-      this.buildChoiceRow('Loại âm phát ra', ['Mặc định', 'Cơ học', 'Từ file'], this.keySoundType, (value: string) => {
-        this.keySoundType = value;
-      })
-      this.buildActionRow('Chèn âm từ thư mục', 'Chọn file âm thanh dùng cho nút')
-      this.buildToggleRow('Rung khi ấn phím', '📳', this.vibration, (val: boolean) => {
-        this.vibration = val;
-      })
-      this.buildSliderSetting('Cường độ rung', `${this.vibrationStrength}/3`, this.vibrationStrength, 1, 3, 1, (value: number) => {
-        this.vibrationStrength = Math.round(value);
-      })
-      this.buildToggleRow('Pop-up nút khi ấn phím', '▣', this.keyPopupPreview, (val: boolean) => {
-        this.keyPopupPreview = val;
-      })
-      this.buildSliderSetting('Thời gian giữ phím', `${this.longPressDelay}ms`, this.longPressDelay, 100, 800, 10, (value: number) => {
-        this.longPressDelay = Math.round(value);
-      })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildStickerSettings() {
-    Column() {
-      this.buildToggleRow('Bật bộ sticker GIF', 'GIF', this.stickerGifEnabled, (val: boolean) => {
-        this.stickerGifEnabled = val;
-        this.showDeveloping('Sticker');
-      })
-      this.buildActionRow('Chèn sticker từ file GIF', 'Lưu vào bộ quản lý sticker', () => {
-        this.showDeveloping('Sticker');
-      })
-      this.buildActionRow('Bộ sticker đã lưu', 'Danh sách sticker người dùng thêm vào', () => {
-        this.showDeveloping('Sticker');
-      })
-    }
-    .width('100%')
-  }
-
-  @Builder
-  buildVoiceSettings() {
-    Column() {
-      this.buildToggleRow('Bật nhập bằng giọng nói', '🎙️', this.voiceInputEnabled, (val: boolean) => {
-        this.voiceInputEnabled = val;
-        this.showDeveloping('Voice');
-      })
-      this.buildChoiceRow('Model nhận diện tiếng Việt', ['Nhẹ', 'Cân bằng', 'Chính xác hơn'], this.voiceModel, (value: string) => {
-        this.voiceModel = value;
-        this.showDeveloping('Voice');
-      })
-      this.buildSettingNote('Chỉ hỗ trợ tiếng Việt. Tiêu chí model: trả kết quả nhanh và độ chính xác mục tiêu khoảng 0.8 trở lên; cần benchmark thật trên máy trước khi chốt mặc định.')
-    }
-    .width('100%')
   }
 
   @Builder
@@ -1180,7 +1053,7 @@ struct SettingsPage {
             this.buildChoiceChip(choice, selected === choice, () => {
               onSelect(choice);
             })
-          })
+          }, (choice: string) => choice + '_' + (selected === choice).toString())
         }
       }
       .scrollable(ScrollDirection.Horizontal)
@@ -1221,7 +1094,7 @@ struct SettingsPage {
               this.buildChoiceChip(preset.label, this.isDraftThemePreset(preset), () => {
                 this.applyThemePreset(preset);
               })
-            })
+            }, (preset: KeyboardThemePreset) => preset.label + '_' + this.isDraftThemePreset(preset).toString())
           }
         }
         .scrollable(ScrollDirection.Horizontal)
