@@ -24,6 +24,17 @@ class KeyboardBridgeImpl {
   private onCandidateHandler: KeyEventHandler | null = null;
   private onPasteHandler: PasteTextHandler | null = null;
   private onThemeChangedHandler: SimpleEventHandler | null = null;
+  private onLiveResizeHandler: ((heightVp: number) => void) | null = null;
+
+  registerLiveResizeHandler(handler: (heightVp: number) => void): void {
+    this.onLiveResizeHandler = handler;
+  }
+
+  sendLiveResize(heightVp: number): void {
+    if (this.onLiveResizeHandler) {
+      this.onLiveResizeHandler(heightVp);
+    }
+  }
 
   registerThemeChangedHandler(handler: SimpleEventHandler): void {
     this.onThemeChangedHandler = handler;
@@ -189,6 +200,7 @@ class KeyboardBridgeImpl {
     this.onCandidateHandler = null;
     this.onPasteHandler = null;
     this.onThemeChangedHandler = null;
+    this.onLiveResizeHandler = null;
   }
 }
 
