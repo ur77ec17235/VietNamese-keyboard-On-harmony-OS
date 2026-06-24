@@ -1,7 +1,7 @@
 # Gõ Tiếng Việt - HarmonyOS Keyboard
 
 Dự án **Gõ Tiếng Việt** là một ứng dụng bàn phím (Input Method) dành cho hệ điều hành HarmonyOS / OpenHarmony, hỗ trợ gõ tiếng Việt (ví dụ: kiểu gõ Telex) với giao diện tùy chỉnh và tích hợp nhiều tiện ích.
-App được upload trên cửa hàng AppGallery tại []()
+App được upload trên cửa hàng AppGallery  [tại](https://appgallery.huawei.com/app/detail?id=com.example.gotiengviet&channelId=SHARE&source=appshare)
 ## 🌟 Tính năng chính
 
 - **Bàn phím Tiếng Việt:** Hỗ trợ nhập liệu tiếng Việt với kiểu gõ Telex mượt mà và chính xác.
